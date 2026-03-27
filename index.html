@@ -129,13 +129,13 @@ const BGM = (() => {
   let nextNoteTime = 0;
   let scheduleAhead = 0.1;
   let scheduleInterval = null;
-  let currentTempo = 0.6; // 秒/拍（慢節奏）
+  let currentTempo = 0.38; // 秒/拍（加快節奏）
 
-  // A 小調音階頻率（A3 開始）
+  // A 小調音階頻率（提高 4 個半音，×1.2599）
   const NOTES = {
-    A3: 220.00, B3: 246.94, C4: 261.63, D4: 293.66,
-    E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00,
-    C5: 523.25, E5: 659.25,
+    A3: 277.18, B3: 311.13, C4: 329.63, D4: 369.99,
+    E4: 415.30, F4: 440.00, G4: 493.88, A4: 554.37,
+    C5: 659.26, E5: 830.61,
   };
 
   // 幽靈旋律序列（A 自然小調）
@@ -215,8 +215,8 @@ const BGM = (() => {
     const tremolo = ctx.createOscillator();
     const tremoloGain = ctx.createGain();
 
-    drone1.type = 'sine';    drone1.frequency.value = 55;  // A1
-    drone2.type = 'triangle'; drone2.frequency.value = 82.4; // E2
+    drone1.type = 'sine';    drone1.frequency.value = 69.3;  // C#2（提高 4 半音）
+    drone2.type = 'triangle'; drone2.frequency.value = 103.8; // G#2（提高 4 半音）
 
     dFilter.type = 'lowpass'; dFilter.frequency.value = 400;
     dGain.gain.value = 0.22;
@@ -236,7 +236,7 @@ const BGM = (() => {
   function scheduleMelody() {
     while (nextNoteTime < ctx.currentTime + scheduleAhead * 2) {
       const step = MELODY[melodyIdx % MELODY.length];
-      playOrganNote(NOTES[step.note], nextNoteTime, step.dur * 0.9, step.vel);
+      playOrganNote(NOTES[step.note], nextNoteTime, step.dur * currentTempo * 0.85, step.vel);
       nextNoteTime += step.dur * currentTempo;
       melodyIdx++;
     }
@@ -362,6 +362,7 @@ const SFX = (() => {
 // EXP & 等級
 let exp = 0;
 let level = 1;
+let expDisplayRatio = 0; // 平滑動畫用（視覺進度條）
 function expToNext(n) { return 10 + (n - 1) * 15; }
 
 // ─────────────────────────────────────────
@@ -490,6 +491,7 @@ function checkLevelUp() {
   while (exp >= expToNext(level)) {
     exp -= expToNext(level);
     level++;
+    expDisplayRatio = 0; // 升級後進度條立即歸零
     triggerUpgrade();
     break; // 一次只觸發一次升級，下一局繼續
   }
@@ -1918,31 +1920,32 @@ function drawHUD() {
   ctx.fillStyle = bgmMuted ? '#888' : '#88FFCC';
   ctx.fillText(bgmMuted ? '🔇 M' : '🎵 M', canvas.width - 8, 58);
 
-  // ── EXP 經驗條（畫面底部，重新設計）──
+  // ── EXP 經驗條（畫面底部）──
   const barH  = 26;
   const barY  = canvas.height - barH - 6;
   const barX  = 8;
   const barW  = canvas.width - 16;
-  const expRatio = Math.min(exp / expToNext(level), 1);
+  const expRatio = Math.min(exp / expToNext(level), 1); // 真實比例（顯示百分比用）
+  const dr = expDisplayRatio; // 平滑動畫比例（繪製填充用）
 
   // 外框背景
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.roundRect(barX, barY, barW, barH, 8);
   ctx.fill();
 
-  // 填充漸層
-  if (expRatio > 0) {
-    const grad = ctx.createLinearGradient(barX, 0, barX + barW * expRatio, 0);
+  // 填充漸層（用平滑 expDisplayRatio）
+  if (dr > 0) {
+    const grad = ctx.createLinearGradient(barX, 0, barX + barW * dr, 0);
     grad.addColorStop(0,   '#1A5FCC');
     grad.addColorStop(0.5, '#3399FF');
     grad.addColorStop(1,   '#66CCFF');
     ctx.fillStyle = grad;
-    ctx.roundRect(barX, barY, barW * expRatio, barH, 8);
+    ctx.roundRect(barX, barY, barW * dr, barH, 8);
     ctx.fill();
 
     // 光澤高光條
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.roundRect(barX + 2, barY + 2, barW * expRatio - 4, barH / 2 - 2, 5);
+    ctx.roundRect(barX + 2, barY + 2, barW * dr - 4, barH / 2 - 2, 5);
     ctx.fill();
   }
 
@@ -1961,11 +1964,12 @@ function drawHUD() {
   ctx.textAlign = 'left';
   ctx.fillText(`Lv.${level}`, barX + 10, barY + 17);
 
-  // EXP 數字（置中）
-  ctx.fillStyle = 'rgba(220,240,255,0.9)';
-  ctx.font = 'bold 12px Arial';
+  // 百分比（置中）
+  const pct = Math.round(expRatio * 100);
+  ctx.fillStyle = 'rgba(220,240,255,0.95)';
+  ctx.font = 'bold 13px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(`${exp} / ${expToNext(level)} EXP`, canvas.width / 2, barY + 17);
+  ctx.fillText(`${pct}%`, canvas.width / 2, barY + 17);
 
   // 下一級提示（右側）
   ctx.fillStyle = 'rgba(180,220,255,0.6)';
@@ -2387,6 +2391,9 @@ function drawGhostOrbs() {
 // ─────────────────────────────────────────
 function gameLoop() {
   frameCount++;
+  // 平滑 EXP 進度條（lerp 向真實比例靠近）
+  const _expTarget = Math.min(exp / expToNext(level), 1);
+  expDisplayRatio += (_expTarget - expDisplayRatio) * 0.08;
 
   // ── 更新 ──
   if (state === 'playing') {
