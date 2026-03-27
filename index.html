@@ -251,7 +251,7 @@ const BGM = (() => {
       startDrone();
       // 淡入
       masterGain.gain.cancelScheduledValues(ctx.currentTime);
-      masterGain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 2.0);
+      masterGain.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 2.0); // 音量降低 30%
       scheduleInterval = setInterval(() => scheduleMelody(), 80);
       scheduleMelody();
     },
@@ -634,19 +634,22 @@ function getEnemyTypeByTime() {
   const r = Math.random();
   if (s < 60) {
     return r < 0.70 ? 'skeleton' : 'zombie';
-  } else if (s < 180) {
+  } else if (s < 120) {
+    // 60s~2min：骷髏/殭屍/精英
     if (r < 0.60) return 'skeleton';
     if (r < 0.82) return 'zombie';
     return 'elite_skeleton';
-  } else if (s < 360) {
+  } else if (s < 300) {
+    // 2min~5min：弓箭手開始出現
     if (r < 0.45) return 'skeleton';
     if (r < 0.65) return 'zombie';
-    if (r < 0.85) return 'elite_skeleton';
+    if (r < 0.82) return 'elite_skeleton';
     return 'skeleton_archer';
   } else {
+    // 5min+：弓箭手大量
     if (r < 0.30) return 'skeleton';
     if (r < 0.50) return 'zombie';
-    if (r < 0.75) return 'elite_skeleton';
+    if (r < 0.70) return 'elite_skeleton';
     return 'skeleton_archer';
   }
 }
@@ -1007,11 +1010,34 @@ const player = {
     const fy = Math.sin(this.bladeAngle);
     const rx = -fy, ry = fx; // 右側方向（垂直於面向）
 
-    // 地面陰影（2.5D 基石）
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    // 地面陰影（2.5D 強化）
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
     ctx.beginPath();
-    ctx.ellipse(this.x + 4, this.y + this.radius - 1, this.radius * 0.78, 4.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.x + 5, this.y + this.radius + 2, this.radius * 0.92, 6, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // 腿部（2.5D 等距視角，帶走路動畫）
+    const walkCycle = Math.sin(frameCount * 0.18) * 5;
+    const legBaseY = this.y + this.radius * 0.55;
+    // 左腳靴子
+    ctx.fillStyle = '#1A1A2E';
+    ctx.strokeStyle = '#2A2A4A';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(
+      this.x - rx * 6 + fx * walkCycle * 0.5,
+      legBaseY + walkCycle,
+      5, 3.5, this.bladeAngle, 0, Math.PI * 2
+    );
+    ctx.fill(); ctx.stroke();
+    // 右腳靴子
+    ctx.beginPath();
+    ctx.ellipse(
+      this.x + rx * 6 - fx * walkCycle * 0.5,
+      legBaseY - walkCycle,
+      5, 3.5, this.bladeAngle, 0, Math.PI * 2
+    );
+    ctx.fill(); ctx.stroke();
 
     // 斗篷（面向方向後方，隨移動飄動）
     ctx.fillStyle = '#8B1A1A';
@@ -1070,26 +1096,38 @@ const player = {
     ctx.stroke();
     ctx.restore();
 
-    // 主體板甲（鋼藍漸層）
+    // 主體板甲（2.5D 橢圓身形 + 鋼藍漸層）
     const bodyGrad = ctx.createLinearGradient(
-      this.x - this.radius * 0.7, this.y - this.radius * 0.7,
-      this.x + this.radius * 0.6, this.y + this.radius * 0.6
+      this.x - this.radius * 0.7, this.y - this.radius * 0.8,
+      this.x + this.radius * 0.6, this.y + this.radius * 0.7
     );
-    bodyGrad.addColorStop(0,   '#B8D8F0');
-    bodyGrad.addColorStop(0.4, '#4880C0');
-    bodyGrad.addColorStop(1,   '#1A3860');
+    bodyGrad.addColorStop(0,   '#C8E8FF');
+    bodyGrad.addColorStop(0.35, '#4880C0');
+    bodyGrad.addColorStop(1,   '#0E2448');
     ctx.fillStyle = bodyGrad;
     ctx.strokeStyle = '#0A2040';
     ctx.lineWidth = 2;
+    // 橢圓身體：水平略窄，垂直略高，模擬斜上視角
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.bladeAngle);
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, this.radius * 0.88, this.radius, 0, 0, Math.PI * 2);
+    ctx.restore();
     ctx.fill();
     ctx.stroke();
-    // 胸甲金色飾紋（後半弧）
-    ctx.strokeStyle = 'rgba(255,215,0,0.6)';
-    ctx.lineWidth = 1.2;
+    // 側面高光（左上亮邊，模擬光源在左上）
+    ctx.strokeStyle = 'rgba(200,230,255,0.55)';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius - 4,
+    ctx.arc(this.x, this.y, this.radius - 2,
+      this.bladeAngle - Math.PI * 0.6, this.bladeAngle - Math.PI * 0.15);
+    ctx.stroke();
+    // 胸甲金色飾紋（後半弧）
+    ctx.strokeStyle = 'rgba(255,215,0,0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius - 5,
       this.bladeAngle + Math.PI * 0.65, this.bladeAngle + Math.PI * 1.35);
     ctx.stroke();
 
@@ -1904,15 +1942,28 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.fillText(`擊殺: ${killCount}`, canvas.width / 2, 33);
 
-  // 右側：敵人數 + Level + 計時器（V3）
+  // 右側：敵人數 + Level
   const alive = enemies.filter(e => !e.dead).length;
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.roundRect(canvas.width - 220, 8, 210, 36, 8);
+  ctx.roundRect(canvas.width - 160, 8, 150, 36, 8);
   ctx.fill();
   ctx.fillStyle = '#FF8A80';
   ctx.font = 'bold 13px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(`敵人: ${alive}  Lv.${level}  ⏱${formatTime(getGameSeconds())}`, canvas.width - 115, 30);
+  ctx.fillText(`敵人: ${alive}  Lv.${level}`, canvas.width - 85, 30);
+
+  // 計時器（頂部中央下方，獨立大框）
+  const timeStr = formatTime(getGameSeconds());
+  const timerPulse = bossSpawned && !bossDefeated
+    ? `rgba(255,80,80,${0.55 + Math.sin(frameCount * 0.12) * 0.35})`
+    : 'rgba(0,0,0,0.55)';
+  ctx.fillStyle = timerPulse;
+  ctx.roundRect(canvas.width / 2 - 58, 50, 116, 34, 8);
+  ctx.fill();
+  ctx.fillStyle = bossSpawned && !bossDefeated ? '#FF6060' : '#88FFCC';
+  ctx.font = 'bold 20px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`⏱ ${timeStr}`, canvas.width / 2, 74);
 
   // 靜音圖示（右上角）
   ctx.font = '16px Arial';
@@ -2401,7 +2452,7 @@ function gameLoop() {
     player.update();
 
     // 大魔王：遊戲 5 分鐘後（18000 frames = 300 秒 × 60fps）
-    if (gameTime >= 18000 && !bossSpawned) {
+    if (gameTime >= 10800 && !bossSpawned) {
       bossSpawned = true;
       spawnEnemy('boss');
       addFloatText(canvas.width / 2, canvas.height / 2 - 60, '☠ 大魔王降臨！', '#FF0000');
