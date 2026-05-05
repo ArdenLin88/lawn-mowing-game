@@ -2,9 +2,11 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>割草遊戲 V2 - 骷髏大亂鬥</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
     body {
       background: #0a0f0a;
       display: flex;
@@ -16,11 +18,65 @@
     }
     #wrapper {
       position: relative;
+      max-width: 100vw;
+      max-height: 100vh;
     }
     canvas {
       display: block;
       border: 2px solid #2d5a2d;
       box-shadow: 0 0 30px rgba(0, 255, 0, 0.15);
+      max-width: 100vw;
+      max-height: 100vh;
+      touch-action: none;
+    }
+
+    /* ── 虛擬搖桿（手機 / 觸控裝置）── */
+    .joystick {
+      position: absolute;
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      background: rgba(20, 30, 20, 0.35);
+      border: 2px solid rgba(125, 189, 125, 0.5);
+      box-shadow: 0 0 14px rgba(0, 255, 0, 0.12);
+      touch-action: none;
+      z-index: 5;
+      display: none;
+      pointer-events: auto;
+    }
+    .joystick.visible { display: block; }
+    .joystick-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 56px;
+      height: 56px;
+      margin-left: -28px;
+      margin-top: -28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #a0d8a0, #4a8a4a 70%, #2d5a2d);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 0 10px rgba(120, 220, 120, 0.5);
+      pointer-events: none;
+    }
+    .joystick.aim {
+      border-color: rgba(255, 180, 80, 0.55);
+      box-shadow: 0 0 14px rgba(255, 165, 0, 0.18);
+    }
+    .joystick.aim .joystick-knob {
+      background: radial-gradient(circle at 35% 30%, #ffd28a, #b8772a 70%, #5a3a14);
+      box-shadow: 0 0 10px rgba(255, 180, 80, 0.55);
+    }
+    #joystick-left  { left: 18px;  bottom: 50px; }
+    #joystick-right { right: 18px; bottom: 50px; }
+
+    /* 窄螢幕：升級選單卡片改為折行＋縮小 */
+    @media (max-width: 600px) {
+      #skill-cards-container { flex-wrap: wrap; gap: 10px; justify-content: center; padding: 0 10px; }
+      .skill-card { width: 140px; min-height: 180px; padding: 14px 10px 12px; }
+      .card-icon { font-size: 32px; }
+      .card-name { font-size: 14px; }
+      #upgrade-title { font-size: 26px; }
     }
 
     /* ── 升級選單 overlay ── */
@@ -102,6 +158,10 @@
 <body>
 <div id="wrapper">
   <canvas id="gameCanvas"></canvas>
+
+  <!-- 虛擬搖桿（觸控裝置自動顯示）-->
+  <div id="joystick-left" class="joystick"><div class="joystick-knob"></div></div>
+  <div id="joystick-right" class="joystick aim"><div class="joystick-knob"></div></div>
 
   <!-- 升級選單 -->
   <div id="upgrade-overlay">
@@ -394,6 +454,103 @@ canvas.addEventListener('click', () => {
   if (state === 'gameover') resetGame();
   if (state === 'victory') resetGame();
 });
+
+// ─────────────────────────────────────────
+// 虛擬搖桿（手機觸控）
+// ─────────────────────────────────────────
+const joyMove = { active: false, x: 0, y: 0, touchId: null };
+const joyAim  = { active: false, x: 0, y: 0, touchId: null };
+const isTouchDevice = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches)
+  || ('ontouchstart' in window);
+
+function setupJoystick(elId, stateObj) {
+  const el = document.getElementById(elId);
+  const knob = el.querySelector('.joystick-knob');
+  const radius = 55; // 搖桿桿子最大位移半徑
+
+  function getCenter() {
+    const r = el.getBoundingClientRect();
+    return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  }
+  function updateKnob(dx, dy) {
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+  function resetKnob() {
+    knob.style.transform = 'translate(0px, 0px)';
+  }
+  function pickTouch(e) {
+    for (const t of e.changedTouches) {
+      const r = el.getBoundingClientRect();
+      if (t.clientX >= r.left && t.clientX <= r.right
+       && t.clientY >= r.top  && t.clientY <= r.bottom) return t;
+    }
+    return null;
+  }
+  function findTouchById(touches, id) {
+    for (const t of touches) if (t.identifier === id) return t;
+    return null;
+  }
+
+  el.addEventListener('touchstart', e => {
+    const t = pickTouch(e);
+    if (!t) return;
+    e.preventDefault();
+    stateObj.active = true;
+    stateObj.touchId = t.identifier;
+    const { cx, cy } = getCenter();
+    let dx = t.clientX - cx, dy = t.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > radius) { dx = dx / len * radius; dy = dy / len * radius; }
+    stateObj.x = dx / radius;
+    stateObj.y = dy / radius;
+    updateKnob(dx, dy);
+  }, { passive: false });
+
+  el.addEventListener('touchmove', e => {
+    if (!stateObj.active) return;
+    const t = findTouchById(e.touches, stateObj.touchId);
+    if (!t) return;
+    e.preventDefault();
+    const { cx, cy } = getCenter();
+    let dx = t.clientX - cx, dy = t.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > radius) { dx = dx / len * radius; dy = dy / len * radius; }
+    stateObj.x = dx / radius;
+    stateObj.y = dy / radius;
+    updateKnob(dx, dy);
+  }, { passive: false });
+
+  function endTouch(e) {
+    const t = findTouchById(e.changedTouches, stateObj.touchId);
+    if (!t && stateObj.touchId !== null) return;
+    stateObj.active = false;
+    stateObj.touchId = null;
+    stateObj.x = 0;
+    stateObj.y = 0;
+    resetKnob();
+  }
+  el.addEventListener('touchend', endTouch);
+  el.addEventListener('touchcancel', endTouch);
+}
+setupJoystick('joystick-left',  joyMove);
+setupJoystick('joystick-right', joyAim);
+
+// 觸控裝置才啟用搖桿（playing 狀態下顯示）
+const joyLeftEl  = document.getElementById('joystick-left');
+const joyRightEl = document.getElementById('joystick-right');
+function updateJoystickVisibility() {
+  const show = isTouchDevice && state === 'playing';
+  joyLeftEl.classList.toggle('visible',  show);
+  joyRightEl.classList.toggle('visible', show);
+}
+
+// 觸控裝置：點擊 canvas 也能開始 / 重來
+if (isTouchDevice) {
+  canvas.addEventListener('touchend', e => {
+    if (state === 'start')    { e.preventDefault(); startGame(); }
+    else if (state === 'gameover' || state === 'victory') { e.preventDefault(); resetGame(); }
+  }, { passive: false });
+}
 
 // ─────────────────────────────────────────
 // 粒子系統
@@ -904,7 +1061,14 @@ const player = {
     if (keys['a'] || keys['A'] || keys['ArrowLeft'])   dx -= 1;
     if (keys['d'] || keys['D'] || keys['ArrowRight'])  dx += 1;
 
-    if (dx !== 0 || dy !== 0) {
+    // 搖桿輸入：鍵盤無輸入時生效（dead-zone 0.15）
+    if (dx === 0 && dy === 0 && joyMove.active) {
+      const mag = Math.hypot(joyMove.x, joyMove.y);
+      if (mag > 0.15) {
+        this.x += joyMove.x * this.speed;
+        this.y += joyMove.y * this.speed;
+      }
+    } else if (dx !== 0 || dy !== 0) {
       const len = Math.sqrt(dx * dx + dy * dy);
       this.x += (dx / len) * this.speed;
       this.y += (dy / len) * this.speed;
@@ -913,7 +1077,12 @@ const player = {
     this.x = Math.max(this.radius + 2, Math.min(canvas.width  - this.radius - 2, this.x));
     this.y = Math.max(this.radius + 2, Math.min(canvas.height - this.radius - 2, this.y));
 
-    this.bladeAngle = Math.atan2(mouseY - this.y, mouseX - this.x);
+    // 瞄準：右搖桿啟用時用搖桿方向，否則用滑鼠座標
+    if (joyAim.active && Math.hypot(joyAim.x, joyAim.y) > 0.15) {
+      this.bladeAngle = Math.atan2(joyAim.y, joyAim.x);
+    } else {
+      this.bladeAngle = Math.atan2(mouseY - this.y, mouseX - this.x);
+    }
     this.bladeSpinAngle += 0.18;
 
     if (this.invincible > 0) this.invincible--;
@@ -1942,34 +2111,90 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.fillText(`擊殺: ${killCount}`, canvas.width / 2, 33);
 
-  // 右側：敵人數 + Level
+  // ── 右上資訊面板（整合：時間 / Lv / 敵人數 / 技能清單）──
   const alive = enemies.filter(e => !e.dead).length;
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.roundRect(canvas.width - 160, 8, 150, 36, 8);
+  const owned = Object.entries(player.skillLevels).filter(([, lv]) => lv > 0);
+  const panelW = 178;
+  const headerH = 86;             // 時間 + Lv/敵人 兩列
+  const skillCols = 4;
+  const skillCellW = 40, skillCellH = 36;
+  const skillRows = Math.ceil(owned.length / skillCols);
+  const skillH = owned.length > 0 ? skillRows * skillCellH + 22 : 0;
+  const panelX = canvas.width - panelW - 10;
+  const panelY = 8;
+  const panelH = headerH + skillH + 8;
+
+  // 面板背景
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.roundRect(panelX, panelY, panelW, panelH, 10);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(125, 189, 125, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.roundRect(panelX, panelY, panelW, panelH, 10);
+  ctx.stroke();
+
+  // 時間（大字）— 大魔王登場時閃紅
+  const timeStr = formatTime(getGameSeconds());
+  const isBossTime = bossSpawned && !bossDefeated;
+  if (isBossTime) {
+    const pulse = 0.55 + Math.sin(frameCount * 0.12) * 0.35;
+    ctx.fillStyle = `rgba(255,80,80,${pulse * 0.4})`;
+    ctx.roundRect(panelX + 6, panelY + 6, panelW - 12, 32, 6);
+    ctx.fill();
+  }
+  ctx.fillStyle = isBossTime ? '#FF6060' : '#88FFCC';
+  ctx.font = 'bold 22px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`⏱ ${timeStr}`, panelX + panelW / 2, panelY + 30);
+
+  // Lv 與 敵人數（同一列分左右）
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Lv.${level}`, panelX + 12, panelY + 58);
   ctx.fillStyle = '#FF8A80';
   ctx.font = 'bold 13px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(`敵人: ${alive}  Lv.${level}`, canvas.width - 85, 30);
-
-  // 計時器（頂部中央下方，獨立大框）
-  const timeStr = formatTime(getGameSeconds());
-  const timerPulse = bossSpawned && !bossDefeated
-    ? `rgba(255,80,80,${0.55 + Math.sin(frameCount * 0.12) * 0.35})`
-    : 'rgba(0,0,0,0.55)';
-  ctx.fillStyle = timerPulse;
-  ctx.roundRect(canvas.width / 2 - 58, 50, 116, 34, 8);
-  ctx.fill();
-  ctx.fillStyle = bossSpawned && !bossDefeated ? '#FF6060' : '#88FFCC';
-  ctx.font = 'bold 20px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(`⏱ ${timeStr}`, canvas.width / 2, 74);
-
-  // 靜音圖示（右上角）
-  ctx.font = '16px Arial';
   ctx.textAlign = 'right';
+  ctx.fillText(`敵人 ${alive}`, panelX + panelW - 12, panelY + 58);
+
+  // 靜音圖示（面板內，緊貼底邊）
+  ctx.font = '14px Arial';
+  ctx.textAlign = 'left';
   ctx.fillStyle = bgmMuted ? '#888' : '#88FFCC';
-  ctx.fillText(bgmMuted ? '🔇 M' : '🎵 M', canvas.width - 8, 58);
+  ctx.fillText(bgmMuted ? '🔇 M' : '🎵 M', panelX + 12, panelY + 78);
+
+  // 分隔線
+  if (owned.length > 0) {
+    ctx.strokeStyle = 'rgba(125, 189, 125, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(panelX + 8,  panelY + headerH);
+    ctx.lineTo(panelX + panelW - 8, panelY + headerH);
+    ctx.stroke();
+
+    // 技能標題
+    ctx.fillStyle = 'rgba(220,240,220,0.65)';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('技能', panelX + panelW - 12, panelY + headerH + 13);
+
+    // 技能格子
+    const gridY = panelY + headerH + 18;
+    owned.forEach(([id, lv], i) => {
+      const skill = SKILL_POOL.find(s => s.id === id);
+      if (!skill) return;
+      const col = i % skillCols, row = Math.floor(i / skillCols);
+      const cx = panelX + 8 + col * skillCellW + skillCellW / 2;
+      const cy = gridY + row * skillCellH;
+      ctx.fillStyle = '#fff';
+      ctx.font = '18px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(skill.icon, cx, cy + 14);
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText(`Lv${lv}`, cx, cy + 28);
+    });
+  }
 
   // ── EXP 經驗條（畫面底部）──
   const barH  = 26;
@@ -2032,36 +2257,7 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.font = '10px Arial';
   ctx.textAlign = 'left';
-  ctx.fillText('WASD 移動  ·  滑鼠 控制方向', barX + 6, canvas.height - 1);
-
-  // 技能組合 HUD（右下角）
-  const owned = Object.entries(player.skillLevels).filter(([, lv]) => lv > 0);
-  if (owned.length > 0) {
-    const cols = 4;
-    const cellW = 46, cellH = 32;
-    const rows = Math.ceil(owned.length / cols);
-    const startX = canvas.width - (cols * cellW) - 10;
-    const startY = canvas.height - rows * cellH - 32;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.roundRect(startX - 4, startY - 4, cols * cellW + 8, rows * cellH + 8, 6);
-    ctx.fill();
-
-    owned.forEach(([id, lv], i) => {
-      const skill = SKILL_POOL.find(s => s.id === id);
-      if (!skill) return;
-      const col = i % cols, row = Math.floor(i / cols);
-      const cx = startX + col * cellW + cellW / 2;
-      const cy = startY + row * cellH + 10;
-      ctx.font = '16px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(skill.icon, cx, cy);
-      ctx.fillStyle = '#FFD700';
-      ctx.font = 'bold 10px Arial';
-      ctx.fillText(`Lv${lv}`, cx, cy + 14);
-      ctx.fillStyle = '#fff';
-    });
-  }
+  ctx.fillText(isTouchDevice ? '左搖桿 移動  ·  右搖桿 武器方向' : 'WASD 移動  ·  滑鼠 控制方向', barX + 6, canvas.height - 1);
 }
 
 // ─────────────────────────────────────────
@@ -2082,7 +2278,12 @@ function drawStartScreen() {
 
   ctx.font = '17px Arial';
   ctx.fillStyle = '#aaa';
-  const tips = [
+  const tips = isTouchDevice ? [
+    '● 左搖桿 = 移動角色',
+    '● 右搖桿 = 武器方向（前方扇形）',
+    '● 殺怪累積 EXP → 升級選擇技能',
+    '● 8 種技能：刀刃、速度、護甲、鬼火⋯',
+  ] : [
     '● WASD 移動玩家',
     '● 滑鼠方向 = 刀刃朝向（前方扇形區域）',
     '● 殺怪累積 EXP → 升級選擇技能',
@@ -2094,7 +2295,7 @@ function drawStartScreen() {
 
   ctx.fillStyle = '#FFD700';
   ctx.font = 'bold 26px Arial';
-  ctx.fillText('點擊或按空白鍵開始', canvas.width / 2, canvas.height / 2 + 155);
+  ctx.fillText(isTouchDevice ? '點擊畫面開始' : '點擊或按空白鍵開始', canvas.width / 2, canvas.height / 2 + 155);
 
   ctx.fillStyle = '#888';
   ctx.font = '14px Arial';
@@ -2603,6 +2804,8 @@ function gameLoop() {
   if (state === 'start')    drawStartScreen();
   if (state === 'gameover') { drawHUD(); drawGameOverScreen(); }
   if (state === 'victory')  { drawHUD(); drawVictoryScreen(); }
+
+  updateJoystickVisibility();
 
   // 大魔王血量條（playing 狀態且大魔王出現時）
   if (state === 'playing' && bossSpawned && !bossDefeated) drawBossHpBar();
