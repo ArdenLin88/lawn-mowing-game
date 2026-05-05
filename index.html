@@ -67,8 +67,8 @@
       background: radial-gradient(circle at 35% 30%, #ffd28a, #b8772a 70%, #5a3a14);
       box-shadow: 0 0 10px rgba(255, 180, 80, 0.55);
     }
-    #joystick-left  { left: 18px;  bottom: 50px; }
-    #joystick-right { right: 18px; bottom: 50px; }
+    #joystick-left  { left: 8px;  bottom: 16px; }
+    #joystick-right { right: 8px; bottom: 16px; }
 
     /* 窄螢幕：升級選單卡片改為折行＋縮小 */
     @media (max-width: 600px) {
@@ -77,6 +77,46 @@
       .card-icon { font-size: 32px; }
       .card-name { font-size: 14px; }
       #upgrade-title { font-size: 26px; }
+    }
+
+    /* ── 直立旋轉提示遮罩（只在觸控裝置 + 直立時顯示）── */
+    #rotate-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #0a0f0a;
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #88FFCC;
+      font-family: 'Arial', sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    #rotate-overlay .icon {
+      font-size: 80px;
+      animation: rotateHint 1.6s ease-in-out infinite;
+      margin-bottom: 24px;
+    }
+    #rotate-overlay .title {
+      font-size: 22px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #FFD700;
+    }
+    #rotate-overlay .desc {
+      font-size: 14px;
+      color: #aaa;
+      max-width: 320px;
+      line-height: 1.6;
+    }
+    @keyframes rotateHint {
+      0%, 100% { transform: rotate(0deg); }
+      50%      { transform: rotate(-90deg); }
+    }
+    @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+      #rotate-overlay { display: flex; }
     }
 
     /* ── 升級選單 overlay ── */
@@ -156,6 +196,13 @@
   </style>
 </head>
 <body>
+<!-- 直立模式旋轉提示（觸控裝置且直立時自動顯示，由 CSS @media 控制）-->
+<div id="rotate-overlay">
+  <div class="icon">📱</div>
+  <div class="title">請旋轉手機至橫向</div>
+  <div class="desc">本遊戲需橫向遊玩，旋轉裝置後即可繼續</div>
+</div>
+
 <div id="wrapper">
   <canvas id="gameCanvas"></canvas>
 
@@ -176,6 +223,16 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = 900;
 canvas.height = 650;
+
+// 修正：roundRect 不會自動 beginPath，會讓 sub-path 累積導致每幀 fill 把所有 HUD 框框
+// 用最後一次的 fillStyle 填過去（症狀：HUD 全部變藍色）。改寫讓它自動開新 path。
+(function patchRoundRect() {
+  const orig = CanvasRenderingContext2D.prototype.roundRect;
+  CanvasRenderingContext2D.prototype.roundRect = function (...args) {
+    this.beginPath();
+    return orig.apply(this, args);
+  };
+})();
 
 // ─────────────────────────────────────────
 // 古堡幽靈背景音樂（Web Audio API 程序式合成）
@@ -2538,10 +2595,26 @@ function killEnemy(e, isPrimary = true) {
 // ─────────────────────────────────────────
 // 遊戲初始化 / 重置
 // ─────────────────────────────────────────
+// 觸控裝置：嘗試進入全螢幕並鎖定橫向（Android Chrome 有效；iOS 不支援會 silent fail）
+async function tryLockLandscape() {
+  if (!isTouchDevice) return;
+  try {
+    if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+    }
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock('landscape');
+    }
+  } catch (e) {
+    // iOS / 不支援的瀏覽器會 reject，無妨 — CSS 旋轉提示遮罩會接手
+  }
+}
+
 function startGame() {
   state = 'playing';
   resetGame();
   BGM.start();
+  tryLockLandscape();
 }
 
 function resetGame() {
