@@ -30,11 +30,19 @@
       touch-action: none;
     }
 
+    /* 觸控裝置：移除邊框 / 陰影，讓畫面貼到螢幕兩側 */
+    @media (hover: none) and (pointer: coarse) {
+      canvas {
+        border: none;
+        box-shadow: none;
+      }
+    }
+
     /* ── 虛擬搖桿（手機 / 觸控裝置）── */
     .joystick {
       position: fixed;
-      width: 130px;
-      height: 130px;
+      width: 100px;
+      height: 100px;
       border-radius: 50%;
       background: rgba(20, 30, 20, 0.35);
       border: 2px solid rgba(125, 189, 125, 0.5);
@@ -49,10 +57,10 @@
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 56px;
-      height: 56px;
-      margin-left: -28px;
-      margin-top: -28px;
+      width: 42px;
+      height: 42px;
+      margin-left: -21px;
+      margin-top: -21px;
       border-radius: 50%;
       background: radial-gradient(circle at 35% 30%, #a0d8a0, #4a8a4a 70%, #2d5a2d);
       border: 2px solid rgba(255, 255, 255, 0.4);
@@ -68,8 +76,8 @@
       box-shadow: 0 0 10px rgba(255, 180, 80, 0.55);
     }
     /* 搖桿固定在 viewport 兩側角落，避開 iOS Safari home indicator */
-    #joystick-left  { left: 12px;  bottom: max(16px, env(safe-area-inset-bottom, 16px)); }
-    #joystick-right { right: 12px; bottom: max(16px, env(safe-area-inset-bottom, 16px)); }
+    #joystick-left  { left: 16px;  bottom: max(20px, env(safe-area-inset-bottom, 20px)); }
+    #joystick-right { right: 16px; bottom: max(20px, env(safe-area-inset-bottom, 20px)); }
 
     /* 窄螢幕：升級選單卡片改為折行＋縮小 */
     @media (max-width: 600px) {
@@ -524,7 +532,7 @@ const isTouchDevice = (window.matchMedia && window.matchMedia('(hover: none) and
 function setupJoystick(elId, stateObj) {
   const el = document.getElementById(elId);
   const knob = el.querySelector('.joystick-knob');
-  const radius = 55; // 搖桿桿子最大位移半徑
+  const radius = 42; // 搖桿桿子最大位移半徑
 
   function getCenter() {
     const r = el.getBoundingClientRect();
