@@ -4,17 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>割草遊戲 V2 - 骷髏大亂鬥</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Pirata+One&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
     body {
-      background: #0a0f0a;
+      background: #1A1612;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
       overflow: hidden;
-      font-family: 'Arial', sans-serif;
+      font-family: 'IM Fell English', Georgia, serif;
     }
     #wrapper {
       position: relative;
@@ -23,8 +26,8 @@
     }
     canvas {
       display: block;
-      border: 2px solid #2d5a2d;
-      box-shadow: 0 0 30px rgba(0, 255, 0, 0.15);
+      border: 1px solid #7A6A52;
+      box-shadow: 4px 4px 0 #2A231C;
       max-width: 100vw;
       max-height: 100vh;
       touch-action: none;
@@ -44,9 +47,9 @@
       width: 100px;
       height: 100px;
       border-radius: 50%;
-      background: rgba(20, 30, 20, 0.35);
-      border: 2px solid rgba(125, 189, 125, 0.5);
-      box-shadow: 0 0 14px rgba(0, 255, 0, 0.12);
+      background: rgba(42, 35, 28, 0.6);
+      border: 1px solid rgba(122, 106, 82, 0.85);
+      box-shadow: 2px 2px 0 rgba(10, 8, 6, 0.5);
       touch-action: none;
       z-index: 50;
       display: none;
@@ -62,18 +65,15 @@
       margin-left: -21px;
       margin-top: -21px;
       border-radius: 50%;
-      background: radial-gradient(circle at 35% 30%, #a0d8a0, #4a8a4a 70%, #2d5a2d);
-      border: 2px solid rgba(255, 255, 255, 0.4);
-      box-shadow: 0 0 10px rgba(120, 220, 120, 0.5);
+      background: radial-gradient(circle at 35% 30%, #E8DCC4, #7A6A52 70%, #2A231C);
+      border: 1px solid rgba(232, 220, 196, 0.5);
       pointer-events: none;
     }
     .joystick.aim {
-      border-color: rgba(255, 180, 80, 0.55);
-      box-shadow: 0 0 14px rgba(255, 165, 0, 0.18);
+      border-color: rgba(200, 148, 26, 0.85);
     }
     .joystick.aim .joystick-knob {
-      background: radial-gradient(circle at 35% 30%, #ffd28a, #b8772a 70%, #5a3a14);
-      box-shadow: 0 0 10px rgba(255, 180, 80, 0.55);
+      background: radial-gradient(circle at 35% 30%, #C8941A, #7B1A1A 75%, #1A1612);
     }
     /* 搖桿固定在 viewport 兩側角落，避開 iOS Safari home indicator */
     #joystick-left  { left: 16px;  bottom: max(20px, env(safe-area-inset-bottom, 20px)); }
@@ -112,11 +112,11 @@
       font-size: 22px;
       font-weight: bold;
       margin-bottom: 10px;
-      color: #FFD700;
+      color: #C8941A;  /* xp-glow */
     }
     #rotate-overlay .desc {
       font-size: 14px;
-      color: #aaa;
+      color: #7A6A52;  /* muted */
       max-width: 320px;
       line-height: 1.6;
     }
@@ -134,8 +134,7 @@
       position: absolute;
       top: 0; left: 0;
       width: 100%; height: 100%;
-      backdrop-filter: blur(4px);
-      background: rgba(0, 0, 0, 0.55);
+      background: rgba(26, 22, 18, 0.78);
       flex-direction: column;
       align-items: center;
       justify-content: center;
@@ -147,16 +146,18 @@
       to   { opacity: 1; }
     }
     #upgrade-title {
-      color: #FFD700;
-      font-size: 34px;
-      font-weight: bold;
-      text-shadow: 0 0 20px rgba(255,215,0,0.8);
+      color: #C8941A;
+      font-family: 'Pirata One', cursive;
+      font-size: 42px;
+      font-weight: 400;
       margin-bottom: 8px;
-      letter-spacing: 2px;
+      letter-spacing: 0.05em;
     }
     #upgrade-subtitle {
-      color: #aaa;
-      font-size: 14px;
+      color: #7A6A52;
+      font-family: 'IM Fell English', serif;
+      font-style: italic;
+      font-size: 16px;
       margin-bottom: 28px;
     }
     #skill-cards-container {
@@ -164,11 +165,11 @@
       gap: 20px;
     }
     .skill-card {
+      position: relative;
       width: 160px;
       min-height: 210px;
-      background: linear-gradient(160deg, #1a2a1a, #0d1a0d);
-      border: 2px solid #3a6a3a;
-      border-radius: 14px;
+      background: #2A231C;
+      border: 1px solid #7A6A52;
       padding: 20px 14px 16px;
       text-align: center;
       cursor: pointer;
@@ -177,6 +178,7 @@
       flex-direction: column;
       align-items: center;
       gap: 8px;
+      box-shadow: 4px 4px 0 #1A1612;
       animation: cardIn 0.3s ease-out both;
     }
     .skill-card:nth-child(1) { animation-delay: 0.05s; }
@@ -187,21 +189,88 @@
       to   { transform: translateY(0);    opacity: 1; }
     }
     .skill-card:hover {
-      transform: scale(1.08);
-      border-color: #7dbd7d;
-      box-shadow: 0 0 20px rgba(100,220,100,0.35);
+      transform: translate(-1px, -1px);
+      border-color: #E8DCC4;
+      box-shadow: 5px 5px 0 #1A1612;
     }
+    /* Rarity 線條密度（DESIGN.md 核心 RISK：用線條而非顏色） */
+    /* .common 用 .skill-card 預設細線單框，不需另外宣告 */
+    .skill-card.rare {
+      border: 2px double #E8DCC4;
+      position: relative;
+    }
+    .skill-card.rare::before, .skill-card.rare::after {
+      content: "❦";
+      position: absolute;
+      color: #7A6A52;
+      font-size: 14px;
+      top: 4px;
+      pointer-events: none;
+    }
+    .skill-card.rare::before { left: 8px; }
+    .skill-card.rare::after  { right: 8px; }
+    .skill-card.legendary {
+      border: 1px solid #E8DCC4;
+      outline: 1px solid #E8DCC4;
+      outline-offset: 4px;
+      position: relative;
+    }
+    .skill-card.legendary::before, .skill-card.legendary::after {
+      content: "☠";
+      position: absolute;
+      color: #E8DCC4;
+      font-size: 18px;
+      top: 8px;
+      pointer-events: none;
+    }
+    .skill-card.legendary::before { left: 12px; }
+    .skill-card.legendary::after  { right: 12px; transform: scaleX(-1); }
+    /* maxed 邊框色覆蓋 rarity 邊框色 */
     .skill-card.maxed {
-      border-color: #a0702a;
+      border-color: #C8941A;
+    }
+    .skill-card.legendary.maxed {
+      border-color: #C8941A;
+      outline-color: #C8941A;
     }
     .skill-card.maxed:hover {
-      border-color: #FFD700;
-      box-shadow: 0 0 20px rgba(255,215,0,0.35);
+      border-color: #C8941A;
+      box-shadow: 5px 5px 0 #1A1612, inset 0 0 0 1px #C8941A;
     }
-    .card-icon   { font-size: 40px; line-height: 1; }
-    .card-name   { color: #e8e8dc; font-size: 16px; font-weight: bold; }
-    .card-level  { color: #FFD700; font-size: 13px; }
-    .card-desc   { color: #8ab88a; font-size: 12px; line-height: 1.4; }
+    /* Double upgrade（雙倍升級）— 跟 rarity 正交，覆蓋邊框色，不影響角飾 */
+    .skill-card.double {
+      border: 2px solid #E8C44A;
+      outline: 1px solid #C8941A;
+      outline-offset: 2px;
+    }
+    .skill-card.double:hover {
+      border-color: #E8C44A;
+      box-shadow: 5px 5px 0 #1A1612, inset 0 0 0 1px #E8C44A;
+    }
+    .card-double-badge {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      width: 32px;
+      height: 32px;
+      background: #C8941A;
+      color: #1A1612;
+      font-family: 'Pirata One', cursive;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #E8DCC4;
+      box-shadow: 2px 2px 0 #1A1612;
+      z-index: 2;
+    }
+    /* 確保 container 不裁切徽章 */
+    #skill-cards-container { overflow: visible; }
+    .card-icon   { font-size: 40px; line-height: 1; color: #E8DCC4; }
+    .card-name   { color: #E8DCC4; font-family: 'Pirata One', cursive; font-size: 20px; font-weight: 400; letter-spacing: 0.03em; }
+    .card-level  { color: #C8941A; font-family: 'IM Fell English', serif; font-size: 13px; font-style: italic; }
+    .card-desc   { color: #7A6A52; font-family: 'IM Fell English', serif; font-size: 13px; line-height: 1.45; flex: 1; }
+    .card-rarity { color: #7A6A52; font-family: 'IM Fell English', serif; font-size: 10px; letter-spacing: 0.2em; padding-top: 6px; margin-top: auto; border-top: 1px solid #7A6A52; width: 100%; }
   </style>
 </head>
 <body>
@@ -242,6 +311,27 @@ canvas.height = 600;
     return orig.apply(this, args);
   };
 })();
+
+// ─────────────────────────────────────────
+// Design System Tokens（對應 DESIGN.md「雕版 × 鬼火」）
+// 80% 畫面只用 bg/surface/ink/muted；飽和色配給制
+// ─────────────────────────────────────────
+const COLORS = {
+  bg:      '#1A1612', // 羊皮夜：主背景，永不純黑
+  surface: '#2A231C', // 羊皮陰影：卡片、面板
+  ink:     '#E8DCC4', // 橡膽墨：所有文字、線條，永不純白
+  muted:   '#7A6A52', // 蝕紙黃：次要、停用、格線
+  hero:    '#6E7480', // 冷鐵：騎士主角
+  enemy:   '#D4C8A8', // 骨粉：骷髏
+  blood:   '#7B1A1A', // 牛血：HP、傷害、屍跡
+  xp:      '#C8941A', // 聖物金：XP、升級、稀有
+  crit:    '#5FA89C', // 鬼火青：爆擊、魔法
+  warning: '#C44B1A', // 灰燼橘：低血邊緣
+};
+const FONTS = {
+  display: '"Pirata One", cursive',  // 標題、升級、傷害大字
+  body:    '"IM Fell English", serif', // HUD 標籤、技能描述、tooltip
+};
 
 // ─────────────────────────────────────────
 // 古堡幽靈背景音樂（Web Audio API 程序式合成）
@@ -422,6 +512,7 @@ let evolutionAnnouncements = []; // 武器進化公告
 // 大魔王系統
 let bossSpawned = false;
 let bossDefeated = false;
+let bossRevived = false;   // 大魔王死後復活一次旗標
 
 // ─────────────────────────────────────────
 // 音效系統（Web Audio API，無需外部音效檔）
@@ -695,7 +786,7 @@ function dropExpGem(x, y, value) {
   if (expGems.length >= 150) {
     // 超過上限直接加 EXP，顯示浮動文字（外部聲音補充）
     exp += value;
-    addFloatText(x, y - 10, `+${value}`, '#88CCFF');
+    addFloatText(x, y - 10, `+${value}`, '#C8941A');
     checkLevelUp();
     return;
   }
@@ -734,27 +825,27 @@ const CHAIN_RADII = [50, 80, 120]; // chain_slash Lv1/2/3
 
 const SKILL_POOL = [
   {
-    id: 'blade_arc', name: '刀刃加寬', icon: '⚔️', maxLevel: 3,
+    id: 'blade_arc', name: '刀刃加寬', icon: '⚔️', maxLevel: 3, rarity: 'rare',
     desc: '刀刃弧度 +8%',
     apply: (p) => { p.bladeArc = Math.min(p.bladeArc * 1.08, Math.PI * 0.95); }
   },
   {
-    id: 'player_speed', name: '速度提升', icon: '💨', maxLevel: 3,
+    id: 'player_speed', name: '速度提升', icon: '💨', maxLevel: 3, rarity: 'common',
     desc: '移速 +8%',
     apply: (p) => { p.speed *= 1.08; }
   },
   {
-    id: 'blade_radius', name: '刀刃伸長', icon: '📏', maxLevel: 3,
+    id: 'blade_radius', name: '刀刃伸長', icon: '📏', maxLevel: 3, rarity: 'common',
     desc: '刀刃範圍 +12px',
     apply: (p) => { p.bladeRadius += 12; }
   },
   {
-    id: 'magnet', name: '磁鐵', icon: '🧲', maxLevel: 3,
+    id: 'magnet', name: '磁鐵', icon: '🧲', maxLevel: 3, rarity: 'common',
     desc: 'EXP 吸取範圍 +60px',
     apply: (p) => { p.magnetRange += 60; }
   },
   {
-    id: 'ghost_orb', name: '鬼火', icon: '🔥', maxLevel: 3,
+    id: 'ghost_orb', name: '鬼火', icon: '🔥', maxLevel: 3, rarity: 'rare',
     desc: 'Lv1:1顆 Lv2:3顆 Lv3:5顆 追蹤彈',
     apply: (p) => {
       if (p.ghostOrbLevel === undefined) p.ghostOrbLevel = 0;
@@ -763,12 +854,12 @@ const SKILL_POOL = [
     }
   },
   {
-    id: 'armor', name: '護甲', icon: '🛡️', maxLevel: 3,
+    id: 'armor', name: '護甲', icon: '🛡️', maxLevel: 3, rarity: 'rare',
     desc: '最大HP +1（升級時回滿）',
     apply: (p) => { p.maxHp += 1; p.hp = p.maxHp; }
   },
   {
-    id: 'area_bomb', name: '群體爆炸', icon: '💥', maxLevel: 3,
+    id: 'area_bomb', name: '群體爆炸', icon: '💥', maxLevel: 3, rarity: 'legendary',
     desc: '殺怪時爆炸（每級 +40px）',
     apply: (p) => {
       if (p.areaBombRadius === undefined) p.areaBombRadius = 0;
@@ -776,7 +867,7 @@ const SKILL_POOL = [
     }
   },
   {
-    id: 'chain_slash', name: '連鎖割', icon: '⛓️', maxLevel: 3,
+    id: 'chain_slash', name: '連鎖割', icon: '⛓️', maxLevel: 3, rarity: 'legendary',
     desc: 'Lv1:50 Lv2:80 Lv3:120px 連鎖',
     apply: (p) => {
       if (p.chainSlashLevel === undefined) p.chainSlashLevel = 0;
@@ -801,15 +892,26 @@ function pickUpgradeOptions() {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return shuffled.slice(0, Math.min(3, shuffled.length));
+  const picks = shuffled.slice(0, Math.min(3, shuffled.length));
+
+  // 雙倍升級：每次至多 1 張卡標記為 bonusLevel: 2，降低初始難度
+  // 機率隨 player level 遞減：Lv ≤ 3 20% / ≤ 7 10% / 之後 5%
+  const doubleChance = level <= 3 ? 0.20 : level <= 7 ? 0.10 : 0.05;
+  if (picks.length > 0 && Math.random() < doubleChance) {
+    const idx = Math.floor(Math.random() * picks.length);
+    picks[idx] = { ...picks[idx], bonusLevel: 2 };
+  }
+  return picks;
 }
 
-function applySkill(id) {
+function applySkill(id, times = 1) {
   const skill = SKILL_POOL.find(s => s.id === id);
   if (!skill) return;
-  skill.apply(player);
-  if (!player.skillLevels[id]) player.skillLevels[id] = 0;
-  player.skillLevels[id]++;
+  for (let i = 0; i < times; i++) {
+    skill.apply(player);
+    if (!player.skillLevels[id]) player.skillLevels[id] = 0;
+    player.skillLevels[id]++;
+  }
   checkEvolutions(); // V3：檢查武器進化條件
 }
 
@@ -820,16 +922,25 @@ function showUpgradeMenu(options) {
     const currentLv = player.skillLevels[skill.id] || 0;
     const nextLv = currentLv + 1;
     const isCycleReset = currentLv >= skill.maxLevel;
+    const rarity = skill.rarity || 'common';
+    const isDouble = skill.bonusLevel === 2;
     const card = document.createElement('div');
-    card.className = 'skill-card' + (isCycleReset ? ' maxed' : '');
+    card.className = `skill-card ${rarity}` + (isDouble ? ' double' : '') + (isCycleReset ? ' maxed' : '');
+    const rarityLabel = { common: 'COMMON', rare: 'RARE', legendary: 'LEGENDARY' }[rarity];
+    const lvLabel = isDouble
+      ? (isCycleReset ? '✨ 強化加成 ×2' : `Lv ${nextLv} → ${nextLv + 1}`)
+      : (isCycleReset ? '✨ 強化加成' : `Lv ${nextLv}`);
+    const doubleBadge = isDouble ? '<div class="card-double-badge">×2</div>' : '';
     card.innerHTML = `
+      ${doubleBadge}
       <div class="card-icon">${skill.icon}</div>
       <div class="card-name">${skill.name}</div>
-      <div class="card-level">${isCycleReset ? '✨ 強化加成' : `Lv ${nextLv}`}</div>
+      <div class="card-level">${lvLabel}</div>
       <div class="card-desc">${skill.desc}</div>
+      <div class="card-rarity">${rarityLabel}</div>
     `;
     card.onclick = () => {
-      applySkill(skill.id);
+      applySkill(skill.id, isDouble ? 2 : 1);
       hideUpgradeMenu();
       // 解凍後給玩家 30 frames 無敵緩衝（不立刻被打）
       player.invincible = Math.max(player.invincible, 30);
@@ -901,7 +1012,7 @@ function updateArrows() {
         circleCollide(a.x, a.y, 5, player.x, player.y, player.radius)) {
       SFX.play('arrow');
       if (player.takeDamage()) {
-        addFloatText(player.x, player.y - 25, '-1', '#FF4444');
+        addFloatText(player.x, player.y - 25, '-1', '#C44B1A');
         if (player.hp <= 0) { SFX.play('gameover'); state = 'gameover'; BGM.stop(); }
       }
       a.life = 0;
@@ -994,7 +1105,7 @@ function triggerEvolution(evo) {
       vy: Math.sin(angle) * speed,
       life: 40 + Math.random() * 30,
       maxLife: 60,
-      color: i % 2 === 0 ? '#FFD700' : '#FF6600',
+      color: i % 2 === 0 ? '#C8941A' : '#C44B1A',  // xp-glow / warning
       size: 3 + Math.random() * 3
     });
   }
@@ -1006,20 +1117,18 @@ function drawEvolutionAnnouncements() {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 26px Arial';
-    ctx.fillStyle = '#FFD700';
-    ctx.shadowColor = '#FF6600';
-    ctx.shadowBlur = 15;
-    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-    ctx.lineWidth = 3;
+    ctx.font = 'bold 26px "Pirata One", cursive';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#1A1612';   // ink 底描邊（woodcut 法）
     const y1 = canvas.height / 2 - 20 + i * 70;
     const y2 = canvas.height / 2 + 10 + i * 70;
     ctx.strokeText(ann.line1, canvas.width / 2, y1);
+    ctx.fillStyle = '#C8941A';     // xp-glow 金
     ctx.fillText(ann.line1, canvas.width / 2, y1);
-    ctx.shadowBlur = 0;
-    ctx.font = '16px Arial';
-    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '16px "IM Fell English", serif';
+    ctx.lineWidth = 3;
     ctx.strokeText(ann.line2, canvas.width / 2, y2);
+    ctx.fillStyle = '#E8DCC4';
     ctx.fillText(ann.line2, canvas.width / 2, y2);
     ctx.restore();
     ann.life--;
@@ -1181,7 +1290,7 @@ const player = {
     if (this.invincible > 0) return false;
     this.hp--;
     this.invincible = 70;
-    addParticles(this.x, this.y, '#FF4444', 6);
+    addParticles(this.x, this.y, '#C44B1A', 6);
     SFX.play('hit');
     return true;
   },
@@ -1246,7 +1355,7 @@ const player = {
     const rx = -fy, ry = fx; // 右側方向（垂直於面向）
 
     // 地面陰影（2.5D 強化）
-    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
     ctx.beginPath();
     ctx.ellipse(this.x + 5, this.y + this.radius + 2, this.radius * 0.92, 6, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1255,8 +1364,8 @@ const player = {
     const walkCycle = Math.sin(frameCount * 0.18) * 5;
     const legBaseY = this.y + this.radius * 0.55;
     // 左腳靴子
-    ctx.fillStyle = '#1A1A2E';
-    ctx.strokeStyle = '#2A2A4A';
+    ctx.fillStyle = '#2A231C';   // surface（深靴）
+    ctx.strokeStyle = '#1A1612'; // ink
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.ellipse(
@@ -1314,7 +1423,7 @@ const player = {
     shGrad.addColorStop(0, '#CC3030');
     shGrad.addColorStop(1, '#4A0808');
     ctx.fillStyle = shGrad;
-    ctx.strokeStyle = '#FFD700';
+    ctx.strokeStyle = '#C8941A';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, -11); ctx.lineTo(7.5, -5);
@@ -1331,18 +1440,20 @@ const player = {
     ctx.stroke();
     ctx.restore();
 
-    // 主體板甲（2.5D 橢圓身形 + 鋼藍漸層）
-    const bodyGrad = ctx.createLinearGradient(
-      this.x - this.radius * 0.7, this.y - this.radius * 0.8,
-      this.x + this.radius * 0.6, this.y + this.radius * 0.7
-    );
-    bodyGrad.addColorStop(0,   '#C8E8FF');
-    bodyGrad.addColorStop(0.35, '#4880C0');
-    bodyGrad.addColorStop(1,   '#0E2448');
-    ctx.fillStyle = bodyGrad;
-    ctx.strokeStyle = '#0A2040';
-    ctx.lineWidth = 2;
-    // 橢圓身體：水平略窄，垂直略高，模擬斜上視角
+    // 主體板甲（冷鐵 flat --hero #6E7480 + 1px ink 邊，木刻偏移陰影）
+    // 偏移陰影
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.55)';
+    ctx.save();
+    ctx.translate(this.x + 3, this.y + 3);
+    ctx.rotate(this.bladeAngle);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.radius * 0.88, this.radius, 0, 0, Math.PI * 2);
+    ctx.restore();
+    ctx.fill();
+    // 主體冷鐵
+    ctx.fillStyle = '#6E7480';   // --hero cold iron
+    ctx.strokeStyle = '#1A1612'; // --ink (bg color as border)
+    ctx.lineWidth = 1.5;
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.bladeAngle);
@@ -1351,54 +1462,74 @@ const player = {
     ctx.restore();
     ctx.fill();
     ctx.stroke();
-    // 側面高光（左上亮邊，模擬光源在左上）
-    ctx.strokeStyle = 'rgba(200,230,255,0.55)';
-    ctx.lineWidth = 2.5;
+    // 右側暗部（模擬 woodblock 立體感）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.25)';
+    ctx.save();
+    ctx.translate(this.x + this.radius * 0.2, this.y);
+    ctx.rotate(this.bladeAngle);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.radius * 0.6, this.radius, 0, 0, Math.PI * 2);
+    ctx.restore();
+    ctx.fill();
+    // 左上高光線（冷鐵亮邊）
+    ctx.strokeStyle = 'rgba(180,190,200,0.5)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius - 2,
       this.bladeAngle - Math.PI * 0.6, this.bladeAngle - Math.PI * 0.15);
     ctx.stroke();
-    // 胸甲金色飾紋（後半弧）
-    ctx.strokeStyle = 'rgba(255,215,0,0.65)';
-    ctx.lineWidth = 1.5;
+    // 胸甲聖物金飾紋（後半弧）
+    ctx.strokeStyle = 'rgba(200,148,26,0.55)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius - 5,
       this.bladeAngle + Math.PI * 0.65, this.bladeAngle + Math.PI * 1.35);
     ctx.stroke();
 
-    // 頭盔（面向方向前側）
+    // 頭盔（冷鐵 flat + 1px ink 邊）
     const hx = this.x + fx * 6, hy = this.y + fy * 6;
-    const helmGrad = ctx.createLinearGradient(hx - 9, hy - 9, hx + 6, hy + 7);
-    helmGrad.addColorStop(0,   '#D8EEFF');
-    helmGrad.addColorStop(0.45, '#5888C8');
-    helmGrad.addColorStop(1,   '#182840');
-    ctx.fillStyle = helmGrad;
-    ctx.strokeStyle = '#0A2040';
-    ctx.lineWidth = 2;
+    // 偏移陰影
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+    ctx.beginPath();
+    ctx.arc(hx + 2, hy + 2, 9.5, 0, Math.PI * 2);
+    ctx.fill();
+    // 冷鐵主體（比甲身稍亮，模擬不同光澤）
+    ctx.fillStyle = '#7A8490';
+    ctx.strokeStyle = '#1A1612';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(hx, hy, 9.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // 頭盔金色側飾
-    ctx.strokeStyle = '#FFD700';
+    // 左側高光
+    ctx.strokeStyle = 'rgba(180,190,200,0.55)';
     ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 8.5, this.bladeAngle - Math.PI * 0.7, this.bladeAngle - Math.PI * 0.1);
+    ctx.stroke();
+    // 頭盔聖物金側飾
+    ctx.strokeStyle = '#C8941A';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(hx, hy, 9.5, this.bladeAngle + Math.PI * 0.55, this.bladeAngle + Math.PI * 1.45);
     ctx.stroke();
-    // 護面縫（魔法眼）
-    ctx.fillStyle = '#060A18';
+    // 護面縫（鬼火青眼縫，無 shadowBlur）
+    ctx.fillStyle = '#1A1612';
     ctx.beginPath();
     ctx.ellipse(hx + fx * 3, hy + fy * 3, 5.5, 2.2, this.bladeAngle, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = 'rgba(60,180,255,0.9)';
-    ctx.shadowColor = '#40C0FF';
-    ctx.shadowBlur = 5;
+    // 鬼火青高光（--crit #5FA89C）
+    ctx.fillStyle = '#5FA89C';
     ctx.beginPath();
     ctx.ellipse(hx + fx * 3, hy + fy * 3, 3.5, 1.2, this.bladeAngle, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
-    // 頭頂紅羽
-    ctx.strokeStyle = '#FF3838';
+    // 高光點
+    ctx.fillStyle = '#A8D8D0';
+    ctx.beginPath();
+    ctx.ellipse(hx + fx * 2.5, hy + fy * 2.5, 1.5, 0.7, this.bladeAngle, 0, Math.PI * 2);
+    ctx.fill();
+    // 頭頂血紅羽（配斗篷血色）
+    ctx.strokeStyle = '#7B1A1A';
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -1428,10 +1559,10 @@ const player = {
     const barW = 36, barH = 5;
     const bx = this.x - barW / 2;
     const by = this.y - this.radius - 14;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.7)';
     ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
     const hpRatio = this.hp / this.maxHp;
-    ctx.fillStyle = hpRatio > 0.5 ? '#4CAF50' : hpRatio > 0.25 ? '#FF9800' : '#f44336';
+    ctx.fillStyle = hpRatio > 0.5 ? '#C8941A' : hpRatio > 0.25 ? '#C44B1A' : '#7B1A1A';
     ctx.fillRect(bx, by, barW * hpRatio, barH);
   }
 };
@@ -1458,7 +1589,7 @@ class Enemy {
     else              { this.x = -margin;                    this.y = Math.random() * canvas.height; }
 
     // V3：HP 系統
-    const HP_TABLE = { skeleton: 1, zombie: 1, elite_skeleton: 3, skeleton_archer: 2, boss: 50 };
+    const HP_TABLE = { skeleton: 1, zombie: 1, elite_skeleton: 3, skeleton_archer: 2, boss: 250 };
     this.maxHp = HP_TABLE[type] || 1;
     this.hp = this.maxHp;
     this.hitCooldown = 0;   // 受傷後無敵幀（防止每幀多次扣血）
@@ -1467,24 +1598,24 @@ class Enemy {
     if (type === 'skeleton') {
       this.radius = 14;
       this.speed  = 1.4 + Math.random() * 0.8;
-      this.color  = '#E8E8DC';
+      this.color  = '#E8DCC4';
       this.expValue = 1;
     } else if (type === 'zombie') {
       this.radius = 19;
       this.speed  = 0.7 + Math.random() * 0.5;
       this.color  = '#7DBD7D';
-      this.expValue = 2;
+      this.expValue = 3;   // 殭屍：比骷髏難打，XP 多
     } else if (type === 'elite_skeleton') {
       // V3：精英骷髏
       this.radius = 22;
       this.speed  = 1.8 + Math.random() * 0.8;
       this.color  = '#F5E642';
-      this.expValue = 4;
+      this.expValue = 6;   // 精英：高速高 XP
     } else if (type === 'boss') {
       // 大魔王
       this.radius = 45;
       this.speed  = 1.3;
-      this.color  = '#CC0000';
+      this.color  = '#7B1A1A';  // --blood（大魔王）
       this.expValue = 50;
       this.shootTimer = 0;   // 8 方向箭矢
       this.dashTimer = 0;    // 衝刺攻擊
@@ -1496,7 +1627,7 @@ class Enemy {
       this.radius = 14;
       this.speed  = 1.2 + Math.random() * 0.6;
       this.color  = '#C8E8C8';
-      this.expValue = 3;
+      this.expValue = 4;   // 弓箭手：遠程更危險，XP 稍高
       this.shootTimer = 0;
     }
 
@@ -1602,7 +1733,7 @@ class Enemy {
     const swing = Math.sin(this.wobble) * 5;
 
     // 地面陰影
-    ctx.fillStyle = 'rgba(0,0,0,0.20)';
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.32)';
     ctx.beginPath();
     ctx.ellipse(x + 2, y + r + 1, r * 0.68, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1675,20 +1806,22 @@ class Enemy {
     ctx.fill();
     ctx.stroke();
 
-    // 眼眶（黑底 + 天堂橘色鬼火）
+    // 眼眶（黑底 + 鬼火青，符合設計系統 --crit #5FA89C）
     for (const ex of [-r * 0.29, r * 0.29]) {
       ctx.fillStyle = '#100C06';
       ctx.beginPath();
       ctx.ellipse(x + ex, sy - 0.5, r * 0.21, r * 0.27, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowColor = '#FF7700';
-      ctx.shadowBlur = 7;
-      ctx.fillStyle = '#FF9500';
+      // 無 shadowBlur：用偏移填色模擬深度
+      ctx.fillStyle = '#2A5048';   // 深底
+      ctx.beginPath();
+      ctx.ellipse(x + ex + 0.5, sy + 0.5, r * 0.13, r * 0.17, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#5FA89C';   // 鬼火青主色
       ctx.beginPath();
       ctx.ellipse(x + ex, sy - 0.5, r * 0.12, r * 0.16, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#FFDD50';
+      ctx.fillStyle = '#A8D8D0';   // 高光點
       ctx.beginPath();
       ctx.ellipse(x + ex - 0.8, sy - 1.5, r * 0.055, r * 0.07, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1705,8 +1838,8 @@ class Enemy {
     ctx.fill();
 
     // 下顎牙齒
-    ctx.fillStyle = '#EEE8D4';
-    ctx.strokeStyle = '#504838';
+    ctx.fillStyle = '#E8DCC4';   // ink
+    ctx.strokeStyle = '#7A6A52'; // muted
     ctx.lineWidth = 0.8;
     for (let i = -2; i <= 1; i++) {
       ctx.beginPath();
@@ -1739,7 +1872,7 @@ class Enemy {
     const lunge = Math.sin(this.wobble * 1.1) * 3; // 撲食律動
 
     // 地面陰影
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.35)';
     ctx.beginPath();
     ctx.ellipse(x + 3, y + r, r * 0.82, 4.5, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1832,20 +1965,24 @@ class Enemy {
     ctx.ellipse(hx, hy - hh * 0.5, hw * 0.75, hh * 0.18, 0, Math.PI, Math.PI * 2);
     ctx.fill();
 
-    // 眼睛（血紅色）
+    // 眼睛（血紅色，無 shadowBlur，木刻偏移法）
     for (const ex of [-r * 0.30, r * 0.30]) {
       ctx.fillStyle = '#0A0A08';
       ctx.beginPath();
       ctx.ellipse(hx + ex, hy - hh * 0.12, r * 0.20, r * 0.24, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowColor = '#FF2020';
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = '#DD1010';
+      // 偏移深底（木刻陰影）
+      ctx.fillStyle = '#3D0A0A';
+      ctx.beginPath();
+      ctx.ellipse(hx + ex + 0.5, hy - hh * 0.12 + 0.5, r * 0.13, r * 0.15, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 血紅主色（--blood #7B1A1A 加亮版）
+      ctx.fillStyle = '#9B2A2A';
       ctx.beginPath();
       ctx.ellipse(hx + ex, hy - hh * 0.12, r * 0.12, r * 0.14, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#FF6050';
+      // 高光點
+      ctx.fillStyle = '#C44B1A';
       ctx.beginPath();
       ctx.ellipse(hx + ex - 0.8, hy - hh * 0.18, r * 0.055, r * 0.065, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1892,7 +2029,7 @@ class Enemy {
         ctx.stroke();
       }
     } else {
-      ctx.fillStyle = '#5A8A5A';
+      ctx.fillStyle = '#7A6A52';  // muted（蝕紙黃，殭屍腐爛碎片）
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2 + this.deathTimer * 0.15;
         const r = progress * 30;
@@ -1923,85 +2060,158 @@ class Enemy {
     if (this.maxHp <= 1 || this.dead) return;
     const barW = 24, barH = 4;
     const bx = this.x - barW / 2, by = this.y - this.radius - 12;
-    ctx.fillStyle = '#333';
+    // 背景（surface）
+    ctx.fillStyle = '#2A231C';
+    ctx.fillRect(bx + 1, by + 1, barW, barH);  // 偏移陰影
+    ctx.fillStyle = '#1A1612';
     ctx.fillRect(bx, by, barW, barH);
-    ctx.fillStyle = this.hp > this.maxHp / 2 ? '#22DD22' : '#FF4444';
-    ctx.fillRect(bx, by, barW * (this.hp / this.maxHp), barH);
+    // 血量（blood → warning 漸層，符合設計系統）
+    const ratio = this.hp / this.maxHp;
+    ctx.fillStyle = ratio > 0.5 ? '#7B1A1A' : '#C44B1A';
+    ctx.fillRect(bx, by, barW * ratio, barH);
+    // 邊框
+    ctx.strokeStyle = '#7A6A52';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(bx, by, barW, barH);
   }
 
   // V3：精英骷髏
   drawEliteSkeleton() {
+    const x = this.x, y = this.y, r = this.radius;
     const bobY = Math.sin(this.wobble) * 2;
 
-    // 金色光暈
-    ctx.save();
-    ctx.shadowColor = '#FFD700';
-    ctx.shadowBlur = 15;
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = 2;
+    // 地面陰影
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.32)';
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.restore();
-
-    // 骷髏頭（金黃色，比普通大）
-    ctx.fillStyle = '#F5E642';
-    ctx.strokeStyle = '#C8A800';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y + bobY - 1, this.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.ellipse(this.x - 6, this.y + bobY - 3, 4.5, 5.5, 0, 0, Math.PI * 2);
-    ctx.ellipse(this.x + 6, this.y + bobY - 3, 4.5, 5.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 2, y + r + 1, r * 0.68, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#555';
-    ctx.fillRect(this.x - 2, this.y + bobY + 1, 4, 4);
+    // 暗紅披風（精英標識，取代金色光暈）
+    ctx.fillStyle = '#4A1010';
+    ctx.strokeStyle = '#7B1A1A';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(x, y + bobY + 4, r + 5, r * 0.55, 0, 0, Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    // 披風邊緣血紅細線
+    ctx.strokeStyle = '#C44B1A';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y + bobY, r + 6, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
 
-    ctx.fillStyle = '#FFF8E1';
-    ctx.strokeStyle = '#C8A800';
-    ctx.lineWidth = 0.5;
+    // 精英骨粉主體（--enemy #D4C8A8 + 1px ink 邊）
+    ctx.fillStyle = '#D4C8A8';
+    ctx.strokeStyle = '#1A1612';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y + bobY - 1, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // 骨面暗部（right-side shadow，模擬 woodblock 立體感）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.18)';
+    ctx.beginPath();
+    ctx.ellipse(x + r * 0.25, y + bobY - 1, r * 0.7, r, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 眼眶（黑底 + 血紅，精英更危險）
+    ctx.fillStyle = '#1A1612';
+    ctx.beginPath();
+    ctx.ellipse(x - 6, y + bobY - 3, 4.5, 5.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 6, y + bobY - 3, 4.5, 5.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7B1A1A';
+    ctx.beginPath();
+    ctx.ellipse(x - 6, y + bobY - 3.5, 2.8, 3.8, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 6, y + bobY - 3.5, 2.8, 3.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 眼部高光
+    ctx.fillStyle = '#C44B1A';
+    ctx.beginPath();
+    ctx.ellipse(x - 7, y + bobY - 4.5, 1.2, 1.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 5, y + bobY - 4.5, 1.2, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 鼻孔（inkhole）
+    ctx.fillStyle = '#2A1C10';
+    ctx.fillRect(x - 2, y + bobY + 1, 2, 3);
+    ctx.fillRect(x + 1, y + bobY + 1, 2, 3);
+
+    // 牙齒（骨粉亮，1px ink 邊）
+    ctx.fillStyle = '#E8DCC4';
+    ctx.strokeStyle = '#1A1612';
+    ctx.lineWidth = 0.8;
     for (let i = -2; i <= 1; i++) {
-      ctx.fillRect(this.x + i * 4.5 - 0.5, this.y + bobY + 7, 4, 7);
-      ctx.strokeRect(this.x + i * 4.5 - 0.5, this.y + bobY + 7, 4, 7);
+      ctx.fillRect(x + i * 4.5 - 0.5, y + bobY + 7, 4, 7);
+      ctx.strokeRect(x + i * 4.5 - 0.5, y + bobY + 7, 4, 7);
     }
     this.drawHpBar();
   }
 
   // V3：骷髏弓箭手
   drawArcher() {
+    const x = this.x, y = this.y, r = this.radius;
     const bobY = Math.sin(this.wobble) * 2;
 
-    ctx.fillStyle = '#C8E8C8';
-    ctx.strokeStyle = '#60A060';
+    // 地面陰影
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.28)';
+    ctx.beginPath();
+    ctx.ellipse(x + 2, y + r + 1, r * 0.65, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 骨粉主體（--enemy #D4C8A8 + 1px ink 邊）
+    ctx.fillStyle = '#D4C8A8';
+    ctx.strokeStyle = '#1A1612';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(this.x, this.y + bobY - 1, this.radius, 0, Math.PI * 2);
+    ctx.arc(x, y + bobY - 1, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-
-    ctx.fillStyle = '#111';
+    // 右側暗部
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.15)';
     ctx.beginPath();
-    ctx.ellipse(this.x - 4, this.y + bobY - 3, 3, 4, 0, 0, Math.PI * 2);
-    ctx.ellipse(this.x + 4, this.y + bobY - 3, 3, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + r * 0.3, y + bobY - 1, r * 0.6, r, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 弓
-    ctx.strokeStyle = '#DEB887';
-    ctx.lineWidth = 2;
+    // 眼眶（黑底 + 鬼火青，與普通骷髏一致）
+    ctx.fillStyle = '#1A1612';
     ctx.beginPath();
-    ctx.arc(this.x + 11, this.y + bobY, 10, -Math.PI * 0.6, Math.PI * 0.6);
-    ctx.stroke();
-    // 弓弦
+    ctx.ellipse(x - 4, y + bobY - 3, 3, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 4, y + bobY - 3, 3, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5FA89C';
     ctx.beginPath();
-    ctx.moveTo(this.x + 11 - 6, this.y + bobY - 9);
-    ctx.lineTo(this.x + 11 - 6, this.y + bobY + 9);
+    ctx.ellipse(x - 4, y + bobY - 3.5, 1.8, 2.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 4, y + bobY - 3.5, 1.8, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 鼻孔
+    ctx.fillStyle = '#2A1C10';
+    ctx.fillRect(x - 1.5, y + bobY + 1, 1.5, 2.5);
+    ctx.fillRect(x + 0.5, y + bobY + 1, 1.5, 2.5);
+
+    // 弓（聖物金 --xp-glow #C8941A）
+    ctx.strokeStyle = '#C8941A';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(x + r + 3, y + bobY, r * 0.7, -Math.PI * 0.6, Math.PI * 0.6);
     ctx.stroke();
+    // 弓弦（ink 色）
+    ctx.strokeStyle = '#7A6A52';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + r + 3 - r * 0.42, y + bobY - r * 0.6);
+    ctx.lineTo(x + r + 3 - r * 0.42, y + bobY + r * 0.6);
+    ctx.stroke();
+    // 弓握把金色裝飾
+    ctx.strokeStyle = '#A0741A';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + r + 3, y + bobY - 3);
+    ctx.lineTo(x + r + 3, y + bobY + 3);
+    ctx.stroke();
+
     this.drawHpBar();
   }
 
@@ -2019,30 +2229,48 @@ class Enemy {
     ctx.arc(x, y, r + 20, 0, Math.PI * 2);
     ctx.fill();
 
-    // 骷髏頭主體（暗紅骨頭色）
-    ctx.shadowColor = '#FF2200';
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = '#4A1010';
-    ctx.strokeStyle = '#CC0000';
+    // 骷髏頭主體（blood 暗底 + 1px ink 邊，木刻偏移陰影）
+    // 偏移陰影
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.7)';
+    ctx.beginPath();
+    ctx.arc(x + 3, y + 3, r, 0, Math.PI * 2);
+    ctx.fill();
+    // 主體
+    ctx.fillStyle = '#3A0C0C';   // 深牛血底色
+    ctx.strokeStyle = '#7B1A1A'; // --blood
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    ctx.shadowBlur = 0;
+    // 外圈暗紅框（雙框感）
+    ctx.strokeStyle = '#C44B1A';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+    ctx.stroke();
 
-    // 血紅眼睛（比普通骷髏大很多）
-    ctx.fillStyle = '#FF0000';
-    ctx.shadowColor = '#FF4400';
-    ctx.shadowBlur = 12;
+    // 血紅眼睛（大魔王，無 shadowBlur，偏移木刻法）
+    // 眼眶黑底 + 偏移陰影
+    ctx.fillStyle = '#1A1612';
+    ctx.beginPath();
+    ctx.ellipse(x - 13 + 1, y - 8 + 1, 10, 12, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 13 + 1, y - 8 + 1, 10, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0A0604';
     ctx.beginPath();
     ctx.ellipse(x - 13, y - 8, 9, 11, 0, 0, Math.PI * 2);
     ctx.ellipse(x + 13, y - 8, 9, 11, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
+    // 血紅主色（--blood 亮版）
+    ctx.fillStyle = '#9B2A2A';
+    ctx.beginPath();
+    ctx.ellipse(x - 13, y - 8.5, 6, 7.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 13, y - 8.5, 6, 7.5, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-    // 眼睛高光（恐怖感）
-    ctx.fillStyle = '#FFAA00';
+    // 眼睛高光（灰燼橘 --warning）
+    ctx.fillStyle = '#C44B1A';
     ctx.beginPath();
     ctx.ellipse(x - 13, y - 10, 4, 5, 0, 0, Math.PI * 2);
     ctx.ellipse(x + 13, y - 10, 4, 5, 0, 0, Math.PI * 2);
@@ -2054,20 +2282,18 @@ class Enemy {
     ctx.fillRect(x + 1, y + 2, 4, 5);
 
     // 牙齒（大型鋸齒）
-    ctx.fillStyle = '#FFEECC';
-    ctx.strokeStyle = '#AA7733';
+    ctx.fillStyle = '#E8DCC4';   // ink（骨粉牙齒）
+    ctx.strokeStyle = '#7A6A52'; // muted
     ctx.lineWidth = 1;
     for (let i = -3; i <= 2; i++) {
       ctx.fillRect(x + i * 8 - 1, y + 14, 6, 10);
       ctx.strokeRect(x + i * 8 - 1, y + 14, 6, 10);
     }
 
-    // 金色骷髏王冠
-    ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#AA8800';
+    // 聖物金骷髏王冠（--xp-glow，無 shadowBlur）
+    ctx.fillStyle = '#C8941A';
+    ctx.strokeStyle = '#A07010';
     ctx.lineWidth = 2;
-    ctx.shadowColor = '#FFD700';
-    ctx.shadowBlur = 10;
     ctx.beginPath();
     // 王冠底部
     ctx.moveTo(x - r + 5, y - r + 5);
@@ -2088,14 +2314,16 @@ class Enemy {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.shadowBlur = 0;
 
-    // 王冠寶石
-    ctx.fillStyle = '#FF4444';
+    // 王冠寶石（blood 紅，符合設計系統）
+    ctx.fillStyle = '#7B1A1A';
+    ctx.strokeStyle = '#C44B1A';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(x, y - r - 25, 6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#FF88AA';
+    ctx.stroke();
+    ctx.fillStyle = '#C44B1A';   // warning highlight
     ctx.beginPath();
     ctx.arc(x - 2, y - r - 27, 2, 0, Math.PI * 2);
     ctx.fill();
@@ -2107,7 +2335,7 @@ class Enemy {
 // ─────────────────────────────────────────
 let floatTexts = [];
 
-function addFloatText(x, y, text, color = '#FFD700') {
+function addFloatText(x, y, text, color = '#C8941A') {
   floatTexts.push({ x, y, text, color, life: 50, vy: -1.5 });
 }
 
@@ -2126,10 +2354,10 @@ for (let i = 0; i < 200; i++) {
 }
 
 function drawBackground() {
-  ctx.fillStyle = '#16261A';
+  ctx.fillStyle = '#1A1612';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = 'rgba(40, 100, 40, 0.2)';
+  ctx.strokeStyle = 'rgba(122, 106, 82, 0.18)';
   ctx.lineWidth = 1;
   for (let x = 0; x < canvas.width;  x += 50) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
@@ -2152,28 +2380,37 @@ function drawBackground() {
 // HUD 介面（V2 擴充）
 // ─────────────────────────────────────────
 function drawHUD() {
-  // 血條背景
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.roundRect(10, 10, 180, 34, 8);
-  ctx.fill();
+  // ── HP bar（尖角 + woodblock offset shadow）──
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+  ctx.fillRect(12, 12, 180, 34);
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(10, 10, 180, 34);
 
   const hpRatio = player.hp / player.maxHp;
-  const hpColor = hpRatio > 0.5 ? '#4CAF50' : hpRatio > 0.25 ? '#FF9800' : '#f44336';
+  const hpColor = hpRatio > 0.3 ? COLORS.blood : COLORS.warning;
   ctx.fillStyle = hpColor;
-  ctx.roundRect(14, 14, 172 * hpRatio, 26, 5);
-  ctx.fill();
+  ctx.fillRect(14, 14, 172 * hpRatio, 26);
 
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px Arial';
+  ctx.strokeStyle = COLORS.muted;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(10, 10, 180, 34);
+
+  ctx.fillStyle = COLORS.ink;
+  ctx.font = 'bold 14px "IM Fell English", serif';
   ctx.textAlign = 'left';
   ctx.fillText(`♥ ${player.hp} / ${player.maxHp}`, 20, 31);
 
-  // 分數
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.roundRect(canvas.width / 2 - 80, 8, 160, 36, 8);
-  ctx.fill();
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 22px Arial';
+  // ── 擊殺數面板（尖角 + offset shadow）──
+  const killX = canvas.width / 2 - 80;
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+  ctx.fillRect(killX + 2, 10, 160, 36);
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(killX, 8, 160, 36);
+  ctx.strokeStyle = COLORS.muted;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(killX, 8, 160, 36);
+  ctx.fillStyle = COLORS.xp;
+  ctx.font = 'bold 22px "Pirata One", cursive';
   ctx.textAlign = 'center';
   ctx.fillText(`擊殺: ${killCount}`, canvas.width / 2, 33);
 
@@ -2190,48 +2427,47 @@ function drawHUD() {
   const panelY = 8;
   const panelH = headerH + skillH + 8;
 
-  // 面板背景
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.roundRect(panelX, panelY, panelW, panelH, 10);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(125, 189, 125, 0.35)';
+  // 面板背景（尖角 + offset shadow）
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+  ctx.fillRect(panelX + 2, panelY + 2, panelW, panelH);
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.78)';
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = COLORS.muted;
   ctx.lineWidth = 1;
-  ctx.roundRect(panelX, panelY, panelW, panelH, 10);
-  ctx.stroke();
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-  // 時間（大字）— 大魔王登場時閃紅
+  // 時間（大字）— 大魔王登場時閃灰燼橘
   const timeStr = formatTime(getGameSeconds());
   const isBossTime = bossSpawned && !bossDefeated;
   if (isBossTime) {
     const pulse = 0.55 + Math.sin(frameCount * 0.12) * 0.35;
-    ctx.fillStyle = `rgba(255,80,80,${pulse * 0.4})`;
-    ctx.roundRect(panelX + 6, panelY + 6, panelW - 12, 32, 6);
-    ctx.fill();
+    ctx.fillStyle = `rgba(196, 75, 26, ${pulse * 0.4})`;
+    ctx.fillRect(panelX + 6, panelY + 6, panelW - 12, 32);
   }
-  ctx.fillStyle = isBossTime ? '#FF6060' : '#88FFCC';
-  ctx.font = 'bold 22px Arial';
+  ctx.fillStyle = isBossTime ? COLORS.warning : COLORS.ink;
+  ctx.font = 'bold 22px "Pirata One", cursive';
   ctx.textAlign = 'center';
   ctx.fillText(`⏱ ${timeStr}`, panelX + panelW / 2, panelY + 30);
 
-  // Lv 與 敵人數（同一列分左右）
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 14px Arial';
+  // Lv 與 敵人數
+  ctx.fillStyle = COLORS.xp;
+  ctx.font = 'bold 14px "IM Fell English", serif';
   ctx.textAlign = 'left';
   ctx.fillText(`Lv.${level}`, panelX + 12, panelY + 58);
-  ctx.fillStyle = '#FF8A80';
-  ctx.font = 'bold 13px Arial';
+  ctx.fillStyle = COLORS.warning;
+  ctx.font = 'bold 13px "IM Fell English", serif';
   ctx.textAlign = 'right';
   ctx.fillText(`敵人 ${alive}`, panelX + panelW - 12, panelY + 58);
 
-  // 靜音圖示（面板內，緊貼底邊）
-  ctx.font = '14px Arial';
+  // 靜音圖示
+  ctx.font = '14px "IM Fell English", serif';
   ctx.textAlign = 'left';
-  ctx.fillStyle = bgmMuted ? '#888' : '#88FFCC';
+  ctx.fillStyle = bgmMuted ? COLORS.muted : COLORS.ink;
   ctx.fillText(bgmMuted ? '🔇 M' : '🎵 M', panelX + 12, panelY + 78);
 
   // 分隔線
   if (owned.length > 0) {
-    ctx.strokeStyle = 'rgba(125, 189, 125, 0.25)';
+    ctx.strokeStyle = COLORS.muted;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(panelX + 8,  panelY + headerH);
@@ -2239,12 +2475,12 @@ function drawHUD() {
     ctx.stroke();
 
     // 技能標題
-    ctx.fillStyle = 'rgba(220,240,220,0.65)';
-    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = 'bold 11px "IM Fell English", serif';
     ctx.textAlign = 'right';
     ctx.fillText('技能', panelX + panelW - 12, panelY + headerH + 13);
 
-    // 技能格子
+    // 技能格子（尖角邊框）
     const gridY = panelY + headerH + 18;
     owned.forEach(([id, lv], i) => {
       const skill = SKILL_POOL.find(s => s.id === id);
@@ -2252,12 +2488,16 @@ function drawHUD() {
       const col = i % skillCols, row = Math.floor(i / skillCols);
       const cx = panelX + 8 + col * skillCellW + skillCellW / 2;
       const cy = gridY + row * skillCellH;
-      ctx.fillStyle = '#fff';
-      ctx.font = '18px Arial';
+      // 格子邊框
+      ctx.strokeStyle = 'rgba(122, 106, 82, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - skillCellW / 2 + 4, cy - 4, skillCellW - 8, skillCellH - 4);
+      ctx.fillStyle = COLORS.ink;
+      ctx.font = '18px "IM Fell English", serif';
       ctx.textAlign = 'center';
       ctx.fillText(skill.icon, cx, cy + 14);
-      ctx.fillStyle = '#FFD700';
-      ctx.font = 'bold 10px Arial';
+      ctx.fillStyle = COLORS.xp;
+      ctx.font = 'bold 10px "IM Fell English", serif';
       ctx.fillText(`Lv${lv}`, cx, cy + 28);
     });
   }
@@ -2270,58 +2510,56 @@ function drawHUD() {
   const expRatio = Math.min(exp / expToNext(level), 1); // 真實比例（顯示百分比用）
   const dr = expDisplayRatio; // 平滑動畫比例（繪製填充用）
 
-  // 外框背景
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.roundRect(barX, barY, barW, barH, 8);
-  ctx.fill();
+  // 外框背景（尖角 + offset shadow）
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+  ctx.fillRect(barX + 2, barY + 2, barW, barH);
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(barX, barY, barW, barH);
 
-  // 填充漸層（用平滑 expDisplayRatio）
+  // 填充漸層（深聖物金 → 亮聖物金，保留進度光感）
   if (dr > 0) {
     const grad = ctx.createLinearGradient(barX, 0, barX + barW * dr, 0);
-    grad.addColorStop(0,   '#1A5FCC');
-    grad.addColorStop(0.5, '#3399FF');
-    grad.addColorStop(1,   '#66CCFF');
+    grad.addColorStop(0, '#8A6010');
+    grad.addColorStop(1, '#E8C44A');
     ctx.fillStyle = grad;
-    ctx.roundRect(barX, barY, barW * dr, barH, 8);
-    ctx.fill();
-
-    // 光澤高光條
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.roundRect(barX + 2, barY + 2, barW * dr - 4, barH / 2 - 2, 5);
-    ctx.fill();
+    ctx.fillRect(barX, barY, barW * dr, barH);
   }
 
-  // 快滿時閃爍邊框
+  // 1px muted 邊框
+  ctx.strokeStyle = COLORS.muted;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+
+  // 快滿時 ink alpha pulse 邊框
   if (expRatio > 0.85) {
     const pulse = Math.sin(frameCount * 0.18) * 0.5 + 0.5;
-    ctx.strokeStyle = `rgba(120, 220, 255, ${0.4 + pulse * 0.6})`;
+    ctx.strokeStyle = `rgba(232, 220, 196, ${0.4 + pulse * 0.6})`;
     ctx.lineWidth = 2;
-    ctx.roundRect(barX, barY, barW, barH, 8);
-    ctx.stroke();
+    ctx.strokeRect(barX, barY, barW, barH);
   }
 
   // Lv 標籤（左側）
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 13px Arial';
+  ctx.fillStyle = COLORS.xp;
+  ctx.font = 'bold 13px "IM Fell English", serif';
   ctx.textAlign = 'left';
   ctx.fillText(`Lv.${level}`, barX + 10, barY + 17);
 
   // 百分比（置中）
   const pct = Math.round(expRatio * 100);
-  ctx.fillStyle = 'rgba(220,240,255,0.95)';
-  ctx.font = 'bold 13px Arial';
+  ctx.fillStyle = COLORS.ink;
+  ctx.font = 'bold 13px "IM Fell English", serif';
   ctx.textAlign = 'center';
   ctx.fillText(`${pct}%`, canvas.width / 2, barY + 17);
 
   // 下一級提示（右側）
-  ctx.fillStyle = 'rgba(180,220,255,0.6)';
-  ctx.font = '11px Arial';
+  ctx.fillStyle = 'rgba(122, 106, 82, 0.85)';
+  ctx.font = '11px "IM Fell English", serif';
   ctx.textAlign = 'right';
   ctx.fillText(`Lv.${level + 1} ▶`, barX + barW - 10, barY + 17);
 
   // 操作提示（更細小，放在 EXP 條下方邊緣）
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.font = '10px Arial';
+  ctx.fillStyle = 'rgba(232, 220, 196, 0.25)';
+  ctx.font = '10px "IM Fell English", serif';
   ctx.textAlign = 'left';
   ctx.fillText(isTouchDevice ? '左搖桿 移動  ·  右搖桿 武器方向' : 'WASD 移動  ·  滑鼠 控制方向', barX + 6, canvas.height - 1);
 }
@@ -2330,20 +2568,20 @@ function drawHUD() {
 // 開始畫面
 // ─────────────────────────────────────────
 function drawStartScreen() {
-  ctx.fillStyle = 'rgba(0,0,0,0.82)';
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.88)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = '#4CAF50';
-  ctx.font = 'bold 56px Arial';
+  ctx.fillStyle = '#C8941A';
+  ctx.font = 'bold 56px "Pirata One", cursive';
   ctx.textAlign = 'center';
   ctx.fillText('☠ 割草遊戲 V3 ☠', canvas.width / 2, canvas.height / 2 - 110);
 
-  ctx.fillStyle = '#E8E8DC';
-  ctx.font = '22px Arial';
+  ctx.fillStyle = '#E8DCC4';
+  ctx.font = '22px "IM Fell English", serif';
   ctx.fillText('升級、強化、割翻全場！', canvas.width / 2, canvas.height / 2 - 60);
 
-  ctx.font = '17px Arial';
-  ctx.fillStyle = '#aaa';
+  ctx.font = '17px "IM Fell English", serif';
+  ctx.fillStyle = '#7A6A52';
   const tips = isTouchDevice ? [
     '● 左搖桿 = 移動角色',
     '● 右搖桿 = 武器方向（前方扇形）',
@@ -2359,12 +2597,12 @@ function drawStartScreen() {
     ctx.fillText(t, canvas.width / 2, canvas.height / 2 + i * 30 - 5);
   });
 
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 26px Arial';
+  ctx.fillStyle = '#C8941A';
+  ctx.font = 'bold 26px "Pirata One", cursive';
   ctx.fillText(isTouchDevice ? '點擊畫面開始' : '點擊或按空白鍵開始', canvas.width / 2, canvas.height / 2 + 155);
 
-  ctx.fillStyle = '#888';
-  ctx.font = '14px Arial';
+  ctx.fillStyle = '#7A6A52';
+  ctx.font = '14px "IM Fell English", serif';
   ctx.fillText('🎵 M 鍵靜音', canvas.width / 2, canvas.height / 2 + 188);
 }
 
@@ -2375,39 +2613,41 @@ function drawBossHpBar() {
   const boss = enemies.find(e => e.type === 'boss' && !e.dead);
   if (!boss) return;
 
-  const barH = 22;
+  const barH = 36;
   const barW = canvas.width - 40;
   const bx = 20, by = 12;
   const ratio = boss.hp / boss.maxHp;
 
-  // 外框
-  ctx.fillStyle = '#111';
-  ctx.fillRect(bx - 2, by - 2, barW + 4, barH + 4);
+  // 外框（offset shadow + bg）
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.6)';
+  ctx.fillRect(bx - 1, by - 1, barW + 6, barH + 6);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(bx - 3, by - 3, barW + 6, barH + 6);
 
-  // 背景
-  ctx.fillStyle = '#330000';
+  // 背景（深 blood）
+  ctx.fillStyle = '#3A0808';
   ctx.fillRect(bx, by, barW, barH);
 
-  // 血量（漸層紅色）
+  // 血量（暗 blood → warning 漸層，保留 boss 危險強敵的進度感）
   const grad = ctx.createLinearGradient(bx, by, bx + barW * ratio, by);
-  grad.addColorStop(0, '#FF0000');
-  grad.addColorStop(1, '#FF6600');
+  grad.addColorStop(0, COLORS.blood);
+  grad.addColorStop(1, COLORS.warning);
   ctx.fillStyle = grad;
   ctx.fillRect(bx, by, barW * ratio, barH);
 
-  // 邊框光效
-  ctx.strokeStyle = '#FF4400';
-  ctx.lineWidth = 2;
+  // 邊框（1px warning 尖角）
+  ctx.strokeStyle = COLORS.warning;
+  ctx.lineWidth = 1;
   ctx.strokeRect(bx, by, barW, barH);
 
-  // 文字
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 14px Arial';
+  // 文字（描邊取代 shadowBlur）
+  ctx.font = 'bold 14px "IM Fell English", serif';
   ctx.textAlign = 'center';
-  ctx.shadowColor = '#FF0000';
-  ctx.shadowBlur = 6;
-  ctx.fillText(`☠ 骷髏大魔王  ${boss.hp} / ${boss.maxHp}`, canvas.width / 2, by + barH - 5);
-  ctx.shadowBlur = 0;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = COLORS.bg;
+  ctx.strokeText(`☠ 骷髏大魔王  ${boss.hp} / ${boss.maxHp}`, canvas.width / 2, by + barH - 9);
+  ctx.fillStyle = COLORS.ink;
+  ctx.fillText(`☠ 骷髏大魔王  ${boss.hp} / ${boss.maxHp}`, canvas.width / 2, by + barH - 9);
 }
 
 // ─────────────────────────────────────────
@@ -2415,32 +2655,50 @@ function drawBossHpBar() {
 // ─────────────────────────────────────────
 function drawVictoryScreen() {
   // 半透明深色底層
-  ctx.fillStyle = 'rgba(0,0,0,0.82)';
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.88)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 金色光暈
-  const glow = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, 200);
-  glow.addColorStop(0, 'rgba(255,215,0,0.15)');
-  glow.addColorStop(1, 'rgba(255,215,0,0)');
-  ctx.fillStyle = glow;
+  // ink-bloom（暗墨擴散圓，取代金光 RadialGradient）
+  const bloom = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, 220);
+  bloom.addColorStop(0,   'rgba(42, 35, 28, 0.35)');
+  bloom.addColorStop(0.5, 'rgba(26, 22, 18, 0.15)');
+  bloom.addColorStop(1,   'rgba(26, 22, 18, 0)');
+  ctx.fillStyle = bloom;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 主標題
-  ctx.shadowColor = '#FFD700';
-  ctx.shadowBlur = 30;
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 62px Arial';
+  // 聖物金環圈（xp-glow，雙環取代 neon glow）
+  ctx.strokeStyle = '#C8941A';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, canvas.height / 2, 180, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.25;
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, canvas.height / 2, 195, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // 主標題（描邊取代 shadowBlur）
+  ctx.font = '62px "Pirata One", cursive';
   ctx.textAlign = 'center';
-  ctx.fillText('👑 大魔王已倒！', canvas.width / 2, canvas.height / 2 - 95);
-  ctx.shadowBlur = 0;
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#1A1612';
+  ctx.strokeText('☠ 大魔王已倒！', canvas.width / 2, canvas.height / 2 - 95);
+  ctx.fillStyle = '#C8941A';
+  ctx.fillText('☠ 大魔王已倒！', canvas.width / 2, canvas.height / 2 - 95);
 
-  // 副標題
-  ctx.fillStyle = '#FF6666';
-  ctx.font = 'bold 28px Arial';
-  ctx.fillText('☠ 骷髏王國覆滅 ☠', canvas.width / 2, canvas.height / 2 - 52);
+  // 副標題（warning 色）
+  ctx.font = '28px "Pirata One", cursive';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#1A1612';
+  ctx.strokeText('骷髏王國覆滅', canvas.width / 2, canvas.height / 2 - 52);
+  ctx.fillStyle = '#C44B1A';
+  ctx.fillText('骷髏王國覆滅', canvas.width / 2, canvas.height / 2 - 52);
 
   // 分隔線
-  ctx.strokeStyle = '#FFD700';
+  ctx.strokeStyle = '#C8941A';
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.4;
   ctx.beginPath();
@@ -2450,32 +2708,32 @@ function drawVictoryScreen() {
   ctx.globalAlpha = 1;
 
   // 統計數字
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 24px Arial';
+  ctx.fillStyle = '#C8941A';
+  ctx.font = 'bold 24px "Pirata One", cursive';
   ctx.fillText(`⚔ 擊殺數：${killCount}`, canvas.width / 2, canvas.height / 2 + 5);
 
-  ctx.fillStyle = '#88CCFF';
-  ctx.font = 'bold 22px Arial';
-  ctx.fillText(`⬆ 到達等級：${level}`, canvas.width / 2, canvas.height / 2 + 38);
+  ctx.fillStyle = '#E8DCC4';   // ink 色
+  ctx.font = '22px "Pirata One", cursive';
+  ctx.fillText(`等級：${level}`, canvas.width / 2, canvas.height / 2 + 38);
 
   const mins = Math.floor(gameTime / 60 / 60);
   const secs = Math.floor(gameTime / 60) % 60;
   const timeStr = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
-  ctx.fillStyle = '#88FF88';
-  ctx.font = 'bold 22px Arial';
+  ctx.fillStyle = '#D4C8A8';
+  ctx.font = 'bold 22px "Pirata One", cursive';
   ctx.fillText(`⏱ 遊玩時間：${timeStr}`, canvas.width / 2, canvas.height / 2 + 72);
 
   // 稱號
   const grade = killCount >= 80 ? '究極骷髏屠夫 💀👑' :
                 killCount >= 50 ? '骷髏王剋星 💀⚔' :
                 killCount >= 30 ? '割草英雄 🌾🏆' : '初出茅廬的勇者 🗡';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '22px Arial';
+  ctx.fillStyle = '#E8DCC4';
+  ctx.font = '22px "IM Fell English", serif';
   ctx.fillText(grade, canvas.width / 2, canvas.height / 2 + 110);
 
   // 重玩提示
-  ctx.fillStyle = '#4CAF50';
-  ctx.font = 'bold 20px Arial';
+  ctx.fillStyle = '#C8941A';
+  ctx.font = 'bold 20px "Pirata One", cursive';
   ctx.fillText('點擊或按 R 重新開始', canvas.width / 2, canvas.height / 2 + 150);
 }
 
@@ -2483,31 +2741,31 @@ function drawVictoryScreen() {
 // 遊戲結束畫面
 // ─────────────────────────────────────────
 function drawGameOverScreen() {
-  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.85)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = '#f44336';
-  ctx.font = 'bold 64px Arial';
+  ctx.fillStyle = '#C44B1A';
+  ctx.font = 'bold 64px "Pirata One", cursive';
   ctx.textAlign = 'center';
   ctx.fillText('你被殺死了！', canvas.width / 2, canvas.height / 2 - 80);
 
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 32px Arial';
+  ctx.fillStyle = '#C8941A';
+  ctx.font = 'bold 32px "Pirata One", cursive';
   ctx.fillText(`最終擊殺數：${killCount}`, canvas.width / 2, canvas.height / 2 - 15);
 
-  ctx.fillStyle = '#88CCFF';
-  ctx.font = 'bold 22px Arial';
+  ctx.fillStyle = '#C8941A';
+  ctx.font = 'bold 22px "Pirata One", cursive';
   ctx.fillText(`到達等級：${level}`, canvas.width / 2, canvas.height / 2 + 25);
 
   let grade = killCount >= 50 ? '傳說割草機 🏆' :
               killCount >= 30 ? '骷髏剋星 💀' :
               killCount >= 15 ? '半吊子農夫 🌾' : '嫩芽 🌱';
-  ctx.fillStyle = '#fff';
-  ctx.font = '24px Arial';
+  ctx.fillStyle = '#E8DCC4';
+  ctx.font = '24px "IM Fell English", serif';
   ctx.fillText(grade, canvas.width / 2, canvas.height / 2 + 65);
 
-  ctx.fillStyle = '#4CAF50';
-  ctx.font = 'bold 22px Arial';
+  ctx.fillStyle = '#C8941A';
+  ctx.font = 'bold 22px "Pirata One", cursive';
   ctx.fillText('點擊或按 R 重新開始', canvas.width / 2, canvas.height / 2 + 115);
 }
 
@@ -2541,8 +2799,35 @@ function killEnemy(e, isPrimary = true) {
   // V3：依怪物類型給分
   score += e.type === 'zombie' ? 2 : (e.type === 'elite_skeleton' ? 4 : (e.type === 'skeleton_archer' ? 3 : (e.type === 'boss' ? 100 : 1)));
 
-  // 大魔王死亡 → 破關
+  // 大魔王死亡處理
   if (e.type === 'boss') {
+    if (!bossRevived) {
+      // 第一次「死亡」→ 復活！恢復 50% 血量
+      bossRevived = true;
+      e.dead = false;       // 取消死亡標記
+      e.hp = Math.ceil(e.maxHp * 0.5);
+      e.hitCooldown = 60;   // 1 秒無敵幀，留給玩家反應
+      e.flashTimer = 40;    // 白色閃爍表示復活
+      killCount--;          // 撤銷計數
+      score -= 100;         // 撤銷分數
+      // 復活特效：中型粒子環 + 浮動文字
+      for (let i = 0; i < 30; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.5 + Math.random() * 3;
+        particles.push({
+          x: e.x, y: e.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 40 + Math.random() * 30,
+          color: ['#7B1A1A','#C44B1A','#E8DCC4'][Math.floor(Math.random()*3)],
+          radius: 3 + Math.random() * 4
+        });
+      }
+      addFloatText(e.x, e.y - e.radius - 20, '☠ 復活！', '#C44B1A');
+      SFX.bossHurt && SFX.bossHurt();
+      return;
+    }
+    // 第二次真正死亡 → 破關
     bossDefeated = true;
     BGM.stop();
     // 壯觀的粒子爆炸
@@ -2554,7 +2839,7 @@ function killEnemy(e, isPrimary = true) {
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 60 + Math.random() * 60,
-        color: ['#FFD700','#FF4400','#FF0000','#FFAA00'][Math.floor(Math.random()*4)],
+        color: ['#C8941A','#C44B1A','#7B1A1A','#E8DCC4'][Math.floor(Math.random()*4)],
         radius: 4 + Math.random() * 5
       });
     }
@@ -2563,12 +2848,21 @@ function killEnemy(e, isPrimary = true) {
   }
 
   addBloodDecal(e.x, e.y, e.type);
+  // XP 浮動文字：依怪物類型顯示實際經驗值與顏色
+  const xpColors = {
+    skeleton:        '#D4C8A8',   // 骨粉（骨骼色）
+    zombie:          '#7A6A52',   // 蝕紙黃（muted）
+    skeleton_archer: '#C8941A',   // 聖物金（遠程更值錢）
+    elite_skeleton:  '#C8941A',   // 聖物金（精英）
+  };
+  const xpColor = xpColors[e.type] || '#C8941A';
+  const xpLabel = e.expValue >= 4 ? `+${e.expValue} XP` : `+${e.expValue}`;
   if (e.type === 'skeleton') {
     addBoneFragments(e.x, e.y);
-    addFloatText(e.x, e.y - e.radius - 5, '+1', '#E8E8DC');
+    addFloatText(e.x, e.y - e.radius - 5, xpLabel, xpColor);
   } else {
     addBloodSplatter(e.x, e.y);
-    addFloatText(e.x, e.y - e.radius - 5, '+1', '#7DBD7D');
+    addFloatText(e.x, e.y - e.radius - 5, xpLabel, xpColor);
   }
 
   // EXP 寶石
@@ -2585,8 +2879,8 @@ function killEnemy(e, isPrimary = true) {
       }
     }
     // 爆炸視覺
-    addParticles(e.x, e.y, '#FF8800', 12);
-    addFloatText(e.x, e.y - 20, '💥', '#FF8800');
+    addParticles(e.x, e.y, '#C44B1A', 12);   // warning
+    addFloatText(e.x, e.y - 20, '✦', '#C8941A');  // xp-glow，無 emoji
   }
 
   // chain_slash：刀刃命中才觸發（V3：stormChain 加倍半徑）
@@ -2687,12 +2981,25 @@ function resetGame() {
 function drawExpGems() {
   for (const gem of expGems) {
     ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = '#4488FF';
-    ctx.shadowColor = '#88CCFF';
-    ctx.shadowBlur = 5;
+    ctx.globalAlpha = 0.92;
+    // 偏移陰影（woodblock 法，無 shadowBlur）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
     ctx.beginPath();
-    ctx.arc(gem.x, gem.y, 5, 0, Math.PI * 2);
+    ctx.arc(gem.x + 1.5, gem.y + 1.5, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // xp-glow 系列：大寶石聖物金，小寶石蝕紙黃
+    const gemR = gem.value >= 4 ? 7 : (gem.value >= 2 ? 6 : 5);
+    ctx.fillStyle = gem.value >= 4 ? '#C8941A' : (gem.value >= 2 ? '#A07010' : '#7A6A52');
+    ctx.strokeStyle = '#1A1612';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(gem.x, gem.y, gemR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // 高光點（左上角）
+    ctx.fillStyle = gem.value >= 4 ? '#E8C44A' : '#B08828';
+    ctx.beginPath();
+    ctx.arc(gem.x - gemR * 0.3, gem.y - gemR * 0.35, gemR * 0.28, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -2706,15 +3013,30 @@ function drawGhostOrbs() {
     const alpha = orb.life / orb.maxLife;
     // V3：業火進化 → 大火球 + 紅色
     const orbR     = player.hellfireActive ? 12 : 6;
-    const orbColor = player.hellfireActive ? '#FF2200' : '#FF8833';
-    const orbGlow  = player.hellfireActive ? '#FF0000' : '#FF6600';
+    // 設計系統：業火 → warning(#C44B1A), 普通 → xp-glow(#C8941A)
+    const orbColor = player.hellfireActive ? '#C44B1A' : '#C8941A';
+    const orbDark  = player.hellfireActive ? '#7B1A1A' : '#A07010';
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = orbColor;
-    ctx.shadowColor = orbGlow;
-    ctx.shadowBlur = 12;
+    // 偏移陰影（woodblock，無 shadowBlur）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.45)';
+    ctx.beginPath();
+    ctx.arc(orb.x + 1.5, orb.y + 1.5, orbR, 0, Math.PI * 2);
+    ctx.fill();
+    // 主體
+    ctx.fillStyle = orbDark;
     ctx.beginPath();
     ctx.arc(orb.x, orb.y, orbR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = orbColor;
+    ctx.beginPath();
+    ctx.arc(orb.x - orbR * 0.15, orb.y - orbR * 0.15, orbR * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    // 高光
+    ctx.fillStyle = '#E8DCC4';
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.beginPath();
+    ctx.arc(orb.x - orbR * 0.3, orb.y - orbR * 0.3, orbR * 0.25, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -2764,7 +3086,7 @@ function gameLoop() {
         // 被敵人撞到（非刀刃區）
         else if (circleCollide(player.x, player.y, player.radius, e.x, e.y, e.radius)) {
           if (player.takeDamage()) {
-            addFloatText(player.x, player.y - 25, '-1', '#FF4444');
+            addFloatText(player.x, player.y - 25, '-1', '#C44B1A');  // warning
             if (player.hp <= 0) { SFX.play('gameover'); state = 'gameover'; BGM.stop(); }
           }
         }
@@ -2795,7 +3117,7 @@ function gameLoop() {
         exp += gem.value;
         gem.collected = true;
         SFX.play('gem');
-        addFloatText(gem.x, gem.y - 10, `+${gem.value}`, '#88CCFF');
+        addFloatText(gem.x, gem.y - 10, `+${gem.value}`, '#C8941A');  // xp-glow
         checkLevelUp();
       }
     }
