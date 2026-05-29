@@ -271,6 +271,14 @@
     .card-level  { color: #C8941A; font-family: 'IM Fell English', serif; font-size: 13px; font-style: italic; }
     .card-desc   { color: #7A6A52; font-family: 'IM Fell English', serif; font-size: 13px; line-height: 1.45; flex: 1; }
     .card-rarity { color: #7A6A52; font-family: 'IM Fell English', serif; font-size: 10px; letter-spacing: 0.2em; padding-top: 6px; margin-top: auto; border-top: 1px solid #7A6A52; width: 100%; }
+
+    /* ── 石板升級 overlay (on top of canvas) ── */
+    #tablet-overlay {
+      display: none; position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 20;
+    }
+    #tablet-overlay.open { display: block; }
   </style>
 </head>
 <body>
@@ -287,6 +295,9 @@
   <!-- 虛擬搖桿（觸控裝置自動顯示）-->
   <div id="joystick-left" class="joystick"><div class="joystick-knob"></div></div>
   <div id="joystick-right" class="joystick aim"><div class="joystick-knob"></div></div>
+
+  <!-- 石板升級（canvas 繪製，HTML 僅作 z-index 容器）-->
+  <div id="tablet-overlay"></div>
 
   <!-- 升級選單 -->
   <div id="upgrade-overlay">
@@ -497,7 +508,7 @@ const BGM = (() => {
 // ─────────────────────────────────────────
 // 遊戲狀態
 // ─────────────────────────────────────────
-let state = 'start'; // 'start' | 'playing' | 'upgrade' | 'gameover' | 'victory'
+let state = 'charselect'; // 'charselect' | 'playing' | 'upgrade' | 'gameover' | 'victory'
 let score = 0;
 let killCount = 0;
 let frameCount = 0;
@@ -508,11 +519,57 @@ let spawnInterval = 110;
 let gameTime = 0;            // 遊戲計時（frames）
 let arrows = [];             // 箭矢陣列
 let evolutionAnnouncements = []; // 武器進化公告
+let aliveEnemyCount = 0;    // 存活敵人快取（每幀更新，避免 HUD 重複 filter）
+let inkBloomTimer = 0;       // 升級 ink-bloom 動畫計時（frames）
+
+// ─── 角色系統 ───
+let currentCharacter = 'knight'; // 'knight' | 'mage'
+
+// ─── 法師系統 ───
+let magicBolts    = [];  // 魔法彈陣列
+let beams         = [];  // 以太光束陣列（aether_beam 進化）
+let beamTimer     = 0;   // 光束發射計時
+let mageFireTimer = 0;   // 發射計時器
+let iceWalls      = [];  // 冰牆陣列
+let iceWallTimer  = 0;   // 冰牆冷卻計時
+
+// ─── 盜賊系統 ───
+let daggers           = [];  // 匕首陣列
+let rogueDaggerTimer  = 0;   // 投擲計時器
+let phantoms          = [];  // 幻影陣列
+let phantomSpawnTimer = 0;   // 幻影生成計時
+let comboCount        = 0;   // 連殺計數
+let comboTimer        = 0;   // 連殺超時計時（>120 幀重置）
 
 // 大魔王系統
 let bossSpawned = false;
 let bossDefeated = false;
 let bossRevived = false;   // 大魔王死後復活一次旗標
+
+// ─── 死後審判系統 ───
+let runStats = { kills:0, level:1, time:0, maxCombo:0, damageTaken:0 };
+let lastRunStats = null;
+
+// ─── 墓誌銘金幣系統 ───
+let tombCoins = 0;
+let stoneTabletUpgrades = {};  // { upgradeId: purchaseCount }
+
+// ─── 三幕制 ───
+let actPhase = 0;        // 0=廢城入口  1=腐敗森林  2=骷髏王廷
+let actBannerTimer = 0;  // 幕次公告顯示倒計時（frames）
+
+// ─── 敵人圖鑑 ───
+let codexUnlocked = new Set();
+let codexKillCounts = {};  // { type: count }
+let codexNewUnlock = null; // { type, timer } 解鎖動畫
+
+// ─── 隱藏內容 ───
+let deathCount      = 0;
+let bossRevivesSeen = 0;
+let perfectClearFlag = true;  // 本局零受傷旗標
+
+// ─── 石板升級選擇游標 ───
+let tabletScrollY = 0;  // 未來擴展用
 
 // ─────────────────────────────────────────
 // 音效系統（Web Audio API，無需外部音效檔）
@@ -583,6 +640,34 @@ let expDisplayRatio = 0; // 平滑動畫用（視覺進度條）
 function expToNext(n) { return 10 + (n - 1) * 15; }
 
 // ─────────────────────────────────────────
+// LocalStorage 工具
+// ─────────────────────────────────────────
+function lsGet(key, def) {
+  try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : def; }
+  catch(e) { return def; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+}
+function loadPersistentData() {
+  tombCoins           = lsGet('tombCoins', 0);
+  stoneTabletUpgrades = lsGet('stoneTabletUpgrades', {});
+  lastRunStats        = lsGet('lastRunStats', null);
+  deathCount          = lsGet('deathCount', 0);
+  bossRevivesSeen     = lsGet('bossRevivesSeen', 0);
+  codexKillCounts     = lsGet('codexKillCounts', {});
+  const ul            = lsGet('codexUnlocked', []);
+  codexUnlocked       = new Set(ul);
+}
+function savePersistentData() {
+  lsSet('tombCoins',           tombCoins);
+  lsSet('stoneTabletUpgrades', stoneTabletUpgrades);
+  lsSet('codexKillCounts',     codexKillCounts);
+  lsSet('codexUnlocked',       [...codexUnlocked]);
+}
+loadPersistentData();
+
+// ─────────────────────────────────────────
 // 輸入
 // ─────────────────────────────────────────
 const keys = {};
@@ -592,8 +677,13 @@ let mouseY = canvas.height / 2;
 let bgmMuted = false;
 document.addEventListener('keydown', e => {
   keys[e.key] = true;
-  if ((e.key === 'r' || e.key === 'R') && (state === 'gameover' || state === 'victory')) resetGame();
+  if ((e.key === 'r' || e.key === 'R') && (state === 'gameover' || state === 'victory')) goToCharSelect();
   if (e.key === ' ' && state === 'start') startGame();
+  if (e.key === '1' && state === 'charselect') { currentCharacter = 'knight'; resetGame(); }
+  if (e.key === '2' && state === 'charselect') { currentCharacter = 'mage';   resetGame(); }
+  if (e.key === '3' && state === 'charselect') { currentCharacter = 'rogue';  resetGame(); }
+  if (e.key === '4' && state === 'charselect' && deathCount >= 5) { currentCharacter = 'necromancer'; resetGame(); }
+  if (e.key === 'Escape' && (state === 'tablet' || state === 'codex')) state = 'charselect';
   if (e.key === 'm' || e.key === 'M') {
     bgmMuted = !bgmMuted;
     BGM.setVolume(bgmMuted ? 0 : 1);
@@ -606,10 +696,18 @@ canvas.addEventListener('mousemove', e => {
   mouseX = e.clientX - r.left;
   mouseY = e.clientY - r.top;
 });
-canvas.addEventListener('click', () => {
-  if (state === 'start') startGame();
-  if (state === 'gameover') resetGame();
-  if (state === 'victory') resetGame();
+canvas.addEventListener('click', (e) => {
+  const r = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / r.width;
+  const scaleY = canvas.height / r.height;
+  const cx = (e.clientX - r.left) * scaleX;
+  const cy = (e.clientY - r.top) * scaleY;
+  if (state === 'start')      startGame();
+  if (state === 'charselect') checkCharSelectClick(cx, cy);
+  if (state === 'gameover')   goToCharSelect();
+  if (state === 'victory')    goToCharSelect();
+  if (state === 'tablet')     handleTabletClick(cx, cy);
+  if (state === 'codex')      state = 'charselect';
 });
 
 // ─────────────────────────────────────────
@@ -704,8 +802,20 @@ function updateJoystickVisibility() {
 // 觸控裝置：點擊 canvas 也能開始 / 重來
 if (isTouchDevice) {
   canvas.addEventListener('touchend', e => {
-    if (state === 'start')    { e.preventDefault(); startGame(); }
-    else if (state === 'gameover' || state === 'victory') { e.preventDefault(); resetGame(); }
+    if (state === 'start') { e.preventDefault(); startGame(); }
+    else if (state === 'charselect') {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      if (t) {
+        const r = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / r.width;
+        const scaleY = canvas.height / r.height;
+        checkCharSelectClick((t.clientX - r.left) * scaleX, (t.clientY - r.top) * scaleY);
+      }
+    }
+    else if (state === 'gameover' || state === 'victory') { e.preventDefault(); goToCharSelect(); }
+    else if (state === 'tablet') { e.preventDefault(); handleTabletClick(tx, ty); }
+    else if (state === 'codex')  { e.preventDefault(); state = 'charselect'; }
   }, { passive: false });
 }
 
@@ -774,7 +884,8 @@ function addBoneFragments(x, y) {
 let bloodDecals = [];
 
 function addBloodDecal(x, y, type) {
-  bloodDecals.push({ x, y, radius: 8 + Math.random() * 14, type, alpha: 0.7 + Math.random() * 0.3 });
+  if (bloodDecals.length >= 150) bloodDecals.shift(); // 上限 150，FIFO
+  bloodDecals.push({ x, y, radius: 8 + Math.random() * 14, type, alpha: 0.7 + Math.random() * 0.3, life: 300, maxLife: 300 });
 }
 
 // ─────────────────────────────────────────
@@ -814,6 +925,7 @@ function checkLevelUp() {
 function triggerUpgrade() {
   state = 'upgrade';
   SFX.play('levelup');
+  inkBloomTimer = 48; // P4：啟動 800ms ink-bloom（48 frames at 60fps）
   const options = pickUpgradeOptions();
   showUpgradeMenu(options);
 }
@@ -876,23 +988,265 @@ const SKILL_POOL = [
   }
 ];
 
+// ─────────────────────────────────────────
+// 法師技能池（Phase 5）
+// ─────────────────────────────────────────
+const MAGE_SKILL_POOL = [
+  {
+    id: 'bolt_speed', name: '魔彈加速', icon: '🔮', maxLevel: 3, rarity: 'common',
+    desc: '發射間隔 -15 frames / 彈速 +10%',
+    apply: (p) => { /* 由 mageFireTimer 計算式自動套用 */ }
+  },
+  {
+    id: 'scatter', name: '散射', icon: '🌀', maxLevel: 3, rarity: 'rare',
+    desc: 'Lv1: +1 彈 Lv2: +2 彈 Lv3: +3 彈（扇形展開）',
+    apply: (p) => { /* 由 fireMagicBolt boltCount 自動套用 */ }
+  },
+  {
+    id: 'frost_pierce', name: '冰霜穿透', icon: '❄️', maxLevel: 3, rarity: 'rare',
+    desc: 'Lv1 穿 1 / Lv2 穿 2 / Lv3 穿 3 個敵人',
+    apply: (p) => { /* 由 fireMagicBolt pierceLeft 自動套用 */ }
+  },
+  {
+    id: 'ice_wall', name: '冰牆', icon: '🌊', maxLevel: 3, rarity: 'legendary',
+    desc: '每 8 秒召喚減速結界，每級範圍 +20px',
+    apply: (p) => { iceWallTimer = Math.max(iceWallTimer - 60, 0); } // 取得時立刻縮短 CD
+  },
+  {
+    id: 'soul_drain', name: '靈魂汲取', icon: '💀', maxLevel: 3, rarity: 'rare',
+    desc: '每次擊殺回復 1 HP（最多至 maxHp）',
+    apply: (p) => { /* 由 updateMagicBolts kill 邏輯處理 */ }
+  },
+  {
+    id: 'chain_lightning', name: '連鎖閃電', icon: '⚡', maxLevel: 3, rarity: 'legendary',
+    desc: '命中後彈射到鄰近 1/2/3 個敵人',
+    apply: (p) => { /* 由 updateMagicBolts chain 邏輯處理 */ }
+  },
+  {
+    id: 'blast_boost', name: '巨彈強化', icon: '🔮', maxLevel: 3, rarity: 'rare',
+    desc: '魔彈半徑 +5px / 滿級傷害 2→3',
+    apply: (p) => { /* 由 fireMagicBolt / updateMagicBolts 自動套用 */ }
+  },
+  {
+    id: 'player_speed', name: '速度提升', icon: '💨', maxLevel: 3, rarity: 'common',
+    desc: '移速 +8%',
+    apply: (p) => { p.speed *= 1.08; }
+  },
+  {
+    id: 'armor', name: '護甲', icon: '🛡️', maxLevel: 3, rarity: 'rare',
+    desc: '最大HP +1（升級時回滿）',
+    apply: (p) => { p.maxHp += 1; p.hp = p.maxHp; }
+  },
+];
+
+// ─────────────────────────────────────────
+// 法師武器進化定義
+// ─────────────────────────────────────────
+const MAGE_EVOLUTION_DEFS = [
+  {
+    id: 'void_burst',
+    name: '虛空爆裂',
+    icon: '🌌',
+    requires: { bolt_speed: 3, scatter: 3 },
+    desc: '魔彈穿透無限，球體更巨大',
+    apply: (p) => { /* evolutions flag 即可，drawMagicBolts 自動判斷 */ }
+  },
+  {
+    id: 'permafrost',
+    name: '永凍術',
+    icon: '🧊',
+    requires: { frost_pierce: 3, ice_wall: 3 },
+    desc: '冰牆範圍翻倍，減速強度 60% → 40%',
+    apply: (p) => { /* evolutions flag 即可，updateIceWalls 自動判斷 */ }
+  },
+  {
+    id: 'aether_beam',
+    name: '以太光束',
+    icon: '☄️',
+    requires: { blast_boost: 3, chain_lightning: 3 },
+    desc: '每 1.5 秒額外發射一道掃射光束',
+    apply: (p) => { /* 由主迴圈 beamTimer 自動觸發 */ }
+  },
+];
+
+// ─────────────────────────────────────────
+// 盜賊技能池（Phase 6）
+// ─────────────────────────────────────────
+const ROGUE_SKILL_POOL = [
+  {
+    id: 'dual_throw', name: '雙投', icon: '🗡️', rarity: 'common', maxLevel: 3,
+    desc: '每次投擲額外增加 1 把匕首（扇形）',
+    apply: (p) => { /* dagger count 由 skillLevels['dual_throw'] 動態讀取 */ }
+  },
+  {
+    id: 'dodge', name: '閃避強化', icon: '💨', rarity: 'rare', maxLevel: 3,
+    desc: '衝刺冷卻縮短 0.5 秒',
+    apply: (p) => { /* dashCooldownMax 由 skillLevels['dodge'] 動態計算 */ }
+  },
+  {
+    id: 'bleed', name: '放血', icon: '🩸', rarity: 'common', maxLevel: 3,
+    desc: '匕首命中後敵人每秒持續失血',
+    apply: (p) => { /* dot 由 updateDaggers 寫入敵人屬性 */ }
+  },
+  {
+    id: 'assassin', name: '暗殺', icon: '☠️', rarity: 'rare', maxLevel: 3,
+    desc: 'HP < 30% 的敵人爆擊率 +40%',
+    apply: (p) => { /* 在 fireDagger/updateDaggers 命中時判斷 */ }
+  },
+  {
+    id: 'phantom', name: '幻影', icon: '🎭', rarity: 'legendary', maxLevel: 3,
+    desc: '召喚殘影，55% 敵人轉而追幻影（每 5 秒更新）',
+    apply: (p) => { /* phantoms 由 updatePhantoms 處理 */ }
+  },
+  {
+    id: 'poison_blade', name: '毒刃', icon: '🔗', rarity: 'legendary', maxLevel: 3,
+    desc: '命中後毒效果傳播至鄰近 2 隻敵人',
+    apply: (p) => { /* 在 updateDaggers 命中時處理 */ }
+  },
+  {
+    id: 'rogue_speed', name: '疾步', icon: '🌬️', rarity: 'common', maxLevel: 3,
+    desc: '移動速度 +0.3',
+    apply: (p) => { p.speed += 0.3; }
+  },
+  {
+    id: 'rogue_armor', name: '影甲', icon: '🛡️', rarity: 'rare', maxLevel: 2,
+    desc: 'HP +1，受傷無敵幀延長',
+    apply: (p) => { p.maxHp++; p.hp = Math.min(p.hp + 1, p.maxHp); }
+  },
+];
+
+const ROGUE_EVOLUTION_DEFS = [
+  {
+    id: 'assassination_master',
+    name: '暗殺之主',
+    icon: '🌑',
+    requires: { assassin: 3, dual_throw: 3 },
+    desc: '每擊皆爆擊，匕首傷害 ×2',
+    apply: (p) => { /* evolutions flag，updateDaggers 自動判斷 */ }
+  },
+  {
+    id: 'plague_bringer',
+    name: '瘟疫使者',
+    icon: '🧪',
+    requires: { bleed: 3, poison_blade: 3 },
+    desc: '毒/血傳播至場上所有敵人',
+    apply: (p) => { /* evolutions flag，updateDaggers 自動判斷 */ }
+  },
+];
+
+// ─────────────────────────────────────────
+// 石板升級定義（跨局永久強化）
+// ─────────────────────────────────────────
+const TABLET_DEFS = [
+  { id:'extra_card',   name:'羊皮書頁',   cost:30, maxBuy:1, icon:'📜', char:'all',
+    desc:'升級選單多出現一張技能卡（3→4張）' },
+  { id:'early_rare',   name:'煉金秘法',   cost:20, maxBuy:1, icon:'⚗️', char:'all',
+    desc:'稀有/傳奇技能可在低等級出現' },
+  { id:'knight_blade', name:'騎士盾徽',   cost:15, maxBuy:3, icon:'🛡️', char:'knight',
+    desc:'騎士初始刀刃弧度 +5%' },
+  { id:'mage_rapid',   name:'法師水晶球', cost:15, maxBuy:3, icon:'🔮', char:'mage',
+    desc:'法師每局初始發射間隔 -10 幀' },
+  { id:'rogue_swift',  name:'盜賊匕首套', cost:15, maxBuy:3, icon:'🗡️', char:'rogue',
+    desc:'盜賊每局初始投擲間隔 -5 幀' },
+  { id:'necro_arc',    name:'死靈鐮刀',   cost:15, maxBuy:3, icon:'☠️', char:'necromancer',
+    desc:'死靈師初始鐮刀弧度 +5%' },
+  { id:'bonus_level',  name:'亡靈書卷',   cost:35, maxBuy:1, icon:'📖', char:'all',
+    desc:'每局開始時自動升一級' },
+];
+
+// ─────────────────────────────────────────
+// 敵人圖鑑條目
+// ─────────────────────────────────────────
+const CODEX_ENTRIES = {
+  skeleton: {
+    name:'骷髏殭民', title:'Ossuary Walker', threat:1,
+    desc:'此亡靈因怨恨不得安息，其骨骸雖朽，執念猶烈。出沒廢墟腐土之間，見活人便趨前撕咬，無懼刀刃。'
+  },
+  zombie: {
+    name:'行屍殭屍', title:'Plague Shambler', threat:2,
+    desc:'中了暗疫之毒的農夫，半死半活，在田畝間漫步。步伐遲緩卻身形厚重，腐氣令旁者望而生畏。'
+  },
+  elite_skeleton: {
+    name:'精英骷髏衛', title:'Crypt Guardian', threat:3,
+    desc:'曾是骷髏王的近衛武士，死後仍穿戴殘破甲冑守衛陵寢。暗紅披風是昔日榮耀的殘影。'
+  },
+  skeleton_archer: {
+    name:'骷髏弓箭手', title:'Bone Bowman', threat:3,
+    desc:'生前狩獵能手，死後不忘弓矢之道，在遠處朝勇者射擊。靠近後攻擊力大減，宜優先追近擊殺。'
+  },
+  boss: {
+    name:'骷髏大魔王', title:'Ossuary Tyrant', threat:5,
+    desc:'古代王國的暴君，死後化為骷髏仍不肯放棄權柄。可在初次被殺後以半血復活，王冠儲存了億萬亡靈的怨氣。'
+  },
+};
+
+// ─────────────────────────────────────────
+// 死靈師技能池（Phase 7，解鎖後使用）
+// ─────────────────────────────────────────
+const NECROMANCER_SKILL_POOL = [
+  { id:'cursed_scythe', name:'詛咒鐮刀', icon:'⚔️', maxLevel:3, rarity:'rare',
+    desc:'鐮刀弧度 +8%，範圍 +10px',
+    apply: (p) => { p.bladeArc = Math.min(p.bladeArc * 1.08, Math.PI * 0.95); p.bladeRadius += 10; }
+  },
+  { id:'soul_harvest', name:'靈魂收割', icon:'💀', maxLevel:3, rarity:'common',
+    desc:'每次擊殺 15% 機率回復 1 HP',
+    apply: (p) => { /* 由 killEnemy 讀取 skillLevels 處理 */ }
+  },
+  { id:'bone_scatter', name:'骨灰散射', icon:'🦴', maxLevel:3, rarity:'legendary',
+    desc:'擊殺時骨灰爆炸（+50px/級）',
+    apply: (p) => { p.areaBombRadius = (p.areaBombRadius || 0) + 50; }
+  },
+  { id:'death_speed', name:'死靈疾走', icon:'💨', maxLevel:3, rarity:'common',
+    desc:'移速 +8%',
+    apply: (p) => { p.speed *= 1.08; }
+  },
+  { id:'phantom_summon', name:'幽靈召喚', icon:'👻', maxLevel:3, rarity:'rare',
+    desc:'召喚 1/3/5 顆幽魂追蹤彈',
+    apply: (p) => {
+      if (p.ghostOrbLevel === undefined) p.ghostOrbLevel = 0;
+      p.ghostOrbLevel++;
+      if (p.ghostOrbTimer === undefined) p.ghostOrbTimer = 0;
+    }
+  },
+  { id:'death_armor', name:'死靈護甲', icon:'🛡️', maxLevel:3, rarity:'rare',
+    desc:'最大 HP +1（升級時回滿）',
+    apply: (p) => { p.maxHp += 1; p.hp = p.maxHp; }
+  },
+  { id:'chain_reap', name:'連鎖收割', icon:'⛓️', maxLevel:3, rarity:'legendary',
+    desc:'鐮刀連鎖波及鄰近 50/80/120px 敵人',
+    apply: (p) => {
+      if (p.chainSlashLevel === undefined) p.chainSlashLevel = 0;
+      p.chainSlashLevel++;
+    }
+  },
+];
+
 function pickUpgradeOptions() {
   const levels = player.skillLevels;
+  const activePool = currentCharacter === 'mage'        ? MAGE_SKILL_POOL        :
+                     currentCharacter === 'rogue'       ? ROGUE_SKILL_POOL       :
+                     currentCharacter === 'necromancer' ? NECROMANCER_SKILL_POOL : SKILL_POOL;
   // 優先未滿級的技能
-  let available = SKILL_POOL.filter(s => (levels[s.id] || 0) < s.maxLevel);
+  let available = activePool.filter(s => (levels[s.id] || 0) < s.maxLevel);
+  // early_rare 石板升級：低等級可見稀有/傳奇
+  if (!stoneTabletUpgrades['early_rare']) {
+    if (level < 4) available = available.filter(s => s.rarity === 'common' || Math.random() < 0.25);
+  }
 
   // cycle reset：全部滿級則允許重選
   if (available.length === 0) {
-    available = [...SKILL_POOL];
+    available = [...activePool];
   }
 
-  // Fisher-Yates shuffle，取前 3
+  // Fisher-Yates shuffle
   const shuffled = [...available];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  const picks = shuffled.slice(0, Math.min(3, shuffled.length));
+  // extra_card 石板升級：3→4 張
+  const cardCount = stoneTabletUpgrades['extra_card'] ? 4 : 3;
+  const picks = shuffled.slice(0, Math.min(cardCount, shuffled.length));
 
   // 雙倍升級：每次至多 1 張卡標記為 bonusLevel: 2，降低初始難度
   // 機率隨 player level 遞減：Lv ≤ 3 20% / ≤ 7 10% / 之後 5%
@@ -905,7 +1259,10 @@ function pickUpgradeOptions() {
 }
 
 function applySkill(id, times = 1) {
-  const skill = SKILL_POOL.find(s => s.id === id);
+  const activePool = currentCharacter === 'mage'        ? MAGE_SKILL_POOL        :
+                     currentCharacter === 'rogue'       ? ROGUE_SKILL_POOL       :
+                     currentCharacter === 'necromancer' ? NECROMANCER_SKILL_POOL : SKILL_POOL;
+  const skill = activePool.find(s => s.id === id);
   if (!skill) return;
   for (let i = 0; i < times; i++) {
     skill.apply(player);
@@ -966,21 +1323,26 @@ function formatTime(s) {
 function getEnemyTypeByTime() {
   const s = getGameSeconds();
   const r = Math.random();
+  // 第二幕：腐敗森林（40 擊殺後），弓箭手比例大增
+  if (actPhase >= 1) {
+    if (r < 0.25) return 'skeleton';
+    if (r < 0.45) return 'zombie';
+    if (r < 0.65) return 'elite_skeleton';
+    return 'skeleton_archer';
+  }
+  // 第一幕：按時間分佈
   if (s < 60) {
     return r < 0.70 ? 'skeleton' : 'zombie';
   } else if (s < 120) {
-    // 60s~2min：骷髏/殭屍/精英
     if (r < 0.60) return 'skeleton';
     if (r < 0.82) return 'zombie';
     return 'elite_skeleton';
   } else if (s < 300) {
-    // 2min~5min：弓箭手開始出現
     if (r < 0.45) return 'skeleton';
     if (r < 0.65) return 'zombie';
     if (r < 0.82) return 'elite_skeleton';
     return 'skeleton_archer';
   } else {
-    // 5min+：弓箭手大量
     if (r < 0.30) return 'skeleton';
     if (r < 0.50) return 'zombie';
     if (r < 0.70) return 'elite_skeleton';
@@ -1038,6 +1400,485 @@ function drawArrows() {
 }
 
 // ─────────────────────────────────────────
+// Phase 5：魔法彈系統
+// ─────────────────────────────────────────
+function fireMagicBolt() {
+  const boltCount   = 2 + (player.skillLevels['scatter'] || 0); // 基礎 2 顆
+  const baseSpeed   = 5.5 + (player.skillLevels['bolt_speed'] || 0) * 0.9;
+  const isVoidBurst = player.evolutions && player.evolutions['void_burst'];
+  const pierceBase  = isVoidBurst ? 999 : (player.skillLevels['frost_pierce'] || 0);
+  const blastLv     = player.skillLevels['blast_boost'] || 0;
+  const baseRadius  = isVoidBurst ? 13 : 7;
+  const boltRadius  = baseRadius + blastLv * 5; // 爆裂強化每級 +5px
+
+  for (let i = 0; i < boltCount; i++) {
+    let spread = 0;
+    if (boltCount > 1) {
+      const maxSpread = boltCount <= 2 ? 0.32 : 0.55;
+      spread = (i / (boltCount - 1) - 0.5) * maxSpread;
+    }
+    const angle = player.bladeAngle + spread;
+    magicBolts.push({
+      x: player.x, y: player.y,
+      vx: Math.cos(angle) * baseSpeed,
+      vy: Math.sin(angle) * baseSpeed,
+      life: 220, maxLife: 220,
+      radius: boltRadius,
+      pierceLeft: pierceBase,
+      hitSet: new Set(),
+    });
+  }
+}
+
+function updateMagicBolts() {
+  const isVoidBurst = player.evolutions && player.evolutions['void_burst'];
+  const chainCount  = isVoidBurst ? 99 : (player.skillLevels['chain_lightning'] || 0);
+  const chainRange  = 140;
+  const blastLv     = player.skillLevels['blast_boost'] || 0;
+  const boltDmg     = 2 + ((blastLv >= 3) ? 1 : 0); // 基礎 2，滿級爆裂強化 +1 = 3
+  const chainDmg    = Math.max(1, boltDmg - 1);     // 連鎖比主擊少 1
+
+  for (const bolt of magicBolts) {
+    bolt.x += bolt.vx;
+    bolt.y += bolt.vy;
+    bolt.life--;
+
+    for (const e of enemies) {
+      if (e.dead || bolt.hitSet.has(e.id)) continue;
+      if (!circleCollide(bolt.x, bolt.y, bolt.radius, e.x, e.y, e.radius)) continue;
+
+      bolt.hitSet.add(e.id);
+
+      // 連鎖閃電
+      if (chainCount > 0) {
+        let chains = 0;
+        for (const other of enemies) {
+          if (chains >= chainCount) break;
+          if (other.dead || other.id === e.id || bolt.hitSet.has(other.id)) continue;
+          if (circleCollide(e.x, e.y, chainRange, other.x, other.y, other.radius)) {
+            bolt.hitSet.add(other.id);
+            if (other.takeDamage(chainDmg)) killEnemy(other, false);
+            else addFloatText(other.x, other.y - other.radius - 5, '⚡', COLORS.crit, 'crit');
+            chains++;
+          }
+        }
+      }
+
+      const died = e.takeDamage(boltDmg);
+      if (died) {
+        // 靈魂汲取：只有直擊命中才回血（V3 規則）
+        if ((player.skillLevels['soul_drain'] || 0) > 0 && player.hp < player.maxHp) {
+          player.hp = Math.min(player.hp + 1, player.maxHp);
+          addFloatText(player.x, player.y - 28, '+1 ♥', COLORS.xp);
+        }
+        killEnemy(e, true);
+      }
+
+      if (bolt.pierceLeft > 0) {
+        bolt.pierceLeft--;   // 穿透：不移除彈丸
+      } else {
+        bolt.life = 0;
+        break;
+      }
+    }
+    // 飛出邊界
+    if (bolt.x < -60 || bolt.x > canvas.width + 60 || bolt.y < -60 || bolt.y > canvas.height + 60) {
+      bolt.life = 0;
+    }
+  }
+  magicBolts = magicBolts.filter(b => b.life > 0);
+}
+
+function drawMagicBolts() {
+  const isVoidBurst = player.evolutions && player.evolutions['void_burst'];
+  for (const bolt of magicBolts) {
+    const alpha = bolt.life / bolt.maxLife;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    // 偏移陰影（woodblock）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+    ctx.beginPath(); ctx.arc(bolt.x + 1.5, bolt.y + 1.5, bolt.radius, 0, Math.PI * 2); ctx.fill();
+    // 主體深色
+    ctx.fillStyle = isVoidBurst ? '#1A0820' : '#1C3A34';
+    ctx.beginPath(); ctx.arc(bolt.x, bolt.y, bolt.radius, 0, Math.PI * 2); ctx.fill();
+    // 主色
+    ctx.fillStyle = isVoidBurst ? COLORS.xp : COLORS.crit;
+    ctx.beginPath(); ctx.arc(bolt.x - bolt.radius * 0.15, bolt.y - bolt.radius * 0.15, bolt.radius * 0.7, 0, Math.PI * 2); ctx.fill();
+    // 高光
+    ctx.fillStyle = COLORS.ink;
+    ctx.globalAlpha = alpha * 0.65;
+    ctx.beginPath(); ctx.arc(bolt.x - bolt.radius * 0.35, bolt.y - bolt.radius * 0.35, bolt.radius * 0.28, 0, Math.PI * 2); ctx.fill();
+    // void_burst：外環光暈
+    if (isVoidBurst) {
+      ctx.globalAlpha = alpha * 0.28;
+      ctx.strokeStyle = COLORS.xp;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(bolt.x, bolt.y, bolt.radius + 7, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// 以太光束 — 進化「以太光束」每 1.5 秒掃射一道（寬幅，每 tick 高傷）
+function spawnBeam(x, y, angle) {
+  beams.push({
+    x, y,
+    angle,
+    length: 900,
+    width: 54,
+    life: 36,
+    maxLife: 36,
+    tick: 4, // 第一次 tick 立刻觸發
+    hitSet: new Set(),
+  });
+  addParticles(x, y, COLORS.crit, 12);
+}
+
+function updateBeams() {
+  for (const b of beams) {
+    b.life--;
+    b.tick++;
+    if (b.tick < 4) continue;
+    b.tick = 0;
+    const cosA = Math.cos(b.angle), sinA = Math.sin(b.angle);
+    const halfW = b.width / 2;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const dx = e.x - b.x, dy = e.y - b.y;
+      const along = dx * cosA + dy * sinA;
+      if (along < 0 || along > b.length) continue;
+      const perp = Math.abs(-dx * sinA + dy * cosA);
+      if (perp > halfW + e.radius) continue;
+      const died = e.takeDamage(2);
+      if (died) killEnemy(e, false); // 光束為 AOE，不觸發 soul_drain（V3）
+    }
+  }
+  beams = beams.filter(b => b.life > 0);
+}
+
+function drawBeams() {
+  for (const b of beams) {
+    const alpha = b.life / b.maxLife;
+    const cosA = Math.cos(b.angle), sinA = Math.sin(b.angle);
+    const ex = b.x + cosA * b.length, ey = b.y + sinA * b.length;
+    ctx.save();
+    ctx.lineCap = 'round';
+    // 雕版深色外框
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.strokeStyle = COLORS.ink;
+    ctx.lineWidth = b.width + 4;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
+    // 主色 crit 青
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = COLORS.crit;
+    ctx.lineWidth = b.width;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
+    // 內芯 ink 細線（鬼火高光）
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.strokeStyle = COLORS.ink;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────
+// Phase 5：冰牆系統
+// ─────────────────────────────────────────
+function updateIceWalls() {
+  if (!(player.skillLevels['ice_wall'] > 0)) return;
+  iceWallTimer++;
+  const cd = 480; // 8 秒
+  if (iceWallTimer >= cd) {
+    iceWallTimer = 0;
+    const angle  = Math.random() * Math.PI * 2;
+    const dist   = 80 + Math.random() * 60;
+    const isPerm = player.evolutions && player.evolutions['permafrost'];
+    const baseR  = 70 + (player.skillLevels['ice_wall'] - 1) * 20;
+    iceWalls.push({
+      x: player.x + Math.cos(angle) * dist,
+      y: player.y + Math.sin(angle) * dist,
+      radius: isPerm ? baseR * 2 : baseR,
+      life: 180, maxLife: 180,
+    });
+    addFloatText(player.x, player.y - 32, '❄ 冰牆', COLORS.crit);
+  }
+  for (const wall of iceWalls) {
+    wall.life--;
+    for (const e of enemies) {
+      if (!e.dead && circleCollide(wall.x, wall.y, wall.radius, e.x, e.y, e.radius)) {
+        e.slowTimer = 12; // 每幀刷新，保持在牆內持續減速
+      }
+    }
+  }
+  iceWalls = iceWalls.filter(w => w.life > 0);
+}
+
+function drawIceWalls() {
+  for (const wall of iceWalls) {
+    const alpha = (wall.life / wall.maxLife) * 0.32;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = COLORS.crit; // 鬼火青
+    ctx.beginPath(); ctx.arc(wall.x, wall.y, wall.radius, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha * 1.6;
+    ctx.strokeStyle = '#A8D8D0';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(wall.x, wall.y, wall.radius, 0, Math.PI * 2); ctx.stroke();
+    // 中心符文
+    ctx.globalAlpha = alpha * 2;
+    ctx.strokeStyle = COLORS.ink;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(wall.x, wall.y, 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────
+// Phase 6：匕首系統
+// ─────────────────────────────────────────
+function fireDagger() {
+  const dualCount = 2 + (player.skillLevels['dual_throw'] || 0); // 基礎 2 把 + 雙投技能
+  const baseAngle = player.bladeAngle;
+  const spread = 0.35; // 扇形半角（≈20°）
+  for (let i = 0; i < dualCount; i++) {
+    // 2 把時：1 主刀正中 + 1 輔刀偏右 10°（玩家可瞄準）；3 把以上回扇形
+    let offset;
+    if (dualCount === 1) offset = 0;
+    else if (dualCount === 2) offset = (i === 0) ? 0 : 0.18;
+    else offset = (i / (dualCount - 1) - 0.5) * spread * 2;
+    const angle = baseAngle + offset;
+    daggers.push({
+      x: player.x, y: player.y,
+      vx: Math.cos(angle) * 8.5,
+      vy: Math.sin(angle) * 8.5,
+      angle,
+      life: 90,
+      maxLife: 90,
+      hitSet: new Set(),  // 避免對同一敵人重複傷害
+      splitLeft: 1,       // 命中可分裂一次
+      scale: 1,
+    });
+  }
+}
+
+function updateDaggers() {
+  const hasPlagueEvo   = player.evolutions && player.evolutions['plague_bringer'];
+  const hasAssassinEvo = player.evolutions && player.evolutions['assassination_master'];
+  const bleedLv    = player.skillLevels['bleed']       || 0;
+  const poisonLv   = player.skillLevels['poison_blade'] || 0;
+  const assassinLv = player.skillLevels['assassin']    || 0;
+
+  const newDaggers = []; // 分裂出的子刀
+
+  for (const d of daggers) {
+    d.x += d.vx;
+    d.y += d.vy;
+    d.life--;
+
+    for (const e of enemies) {
+      if (e.dead || d.hitSet.has(e.id)) continue;
+      if (!circleCollide(d.x, d.y, 5, e.x, e.y, e.radius)) continue;
+
+      d.hitSet.add(e.id);
+
+      // 爆擊判定：暗殺技能 + boss 非暗殺目標 + 進化全爆
+      const isLowHp     = e.hp / e.maxHp < 0.3;
+      const assassinAdd = assassinLv * 0.13;
+      const critChance  = hasAssassinEvo ? 1 : (player.critChance + (isLowHp ? assassinAdd : 0));
+      const isCrit      = Math.random() < critChance;
+
+      if (isCrit) addFloatText(e.x, e.y - e.radius - 8, '⚡CRIT!', COLORS.crit, 'crit');
+      const dmg = (hasAssassinEvo ? 2 : 1) * (isCrit ? 2 : 1);
+      const killed = e.takeDamage(dmg);
+
+      // DoT：放血
+      if (bleedLv > 0 && !e.dead) {
+        e.dotBleedTimer = 180 + bleedLv * 60; // 3-5 秒
+        e.dotBleedDmg   = 1;
+      }
+      // DoT：毒刃（傳播給鄰近敵人）
+      if (poisonLv > 0 && !e.dead) {
+        e.dotPoisonTimer = 240 + poisonLv * 60;
+        e.dotPoisonDmg   = 1;
+        if (hasPlagueEvo) {
+          // 瘟疫使者：傳播到全場
+          for (const ne of enemies) {
+            if (ne.dead || ne === e) continue;
+            ne.dotPoisonTimer = 300;
+            ne.dotPoisonDmg   = 1;
+            ne.dotBleedTimer  = bleedLv > 0 ? 180 : (ne.dotBleedTimer || 0);
+          }
+        } else {
+          // 一般：傳播給最近 2 隻
+          let spread = 0;
+          for (const ne of enemies) {
+            if (spread >= 2 || ne.dead || ne === e) continue;
+            const nx = ne.x - e.x, ny = ne.y - e.y;
+            if (nx * nx + ny * ny < 120 * 120) {
+              ne.dotPoisonTimer = 180;
+              ne.dotPoisonDmg   = 1;
+              spread++;
+            }
+          }
+        }
+      }
+
+      if (killed) {
+        killEnemy(e, true);
+        addCombo(); // 連殺計數
+      }
+
+      // 分裂：命中時若還可分裂，往 ±45° 生兩把小飛刀
+      if (d.splitLeft > 0) {
+        const splitAngle = Math.PI / 3; // 60°
+        for (let s = -1; s <= 1; s += 2) {
+          const newAngle = d.angle + splitAngle * s;
+          newDaggers.push({
+            x: d.x, y: d.y,
+            vx: Math.cos(newAngle) * 8.5,
+            vy: Math.sin(newAngle) * 8.5,
+            angle: newAngle,
+            life: 45,
+            maxLife: 45,
+            hitSet: new Set(d.hitSet), // 繼承，避免回打原目標
+            splitLeft: 0,
+            scale: 0.75,
+          });
+        }
+        addParticles(d.x, d.y, COLORS.crit, 4);
+      }
+
+      d.life = 0; // 匕首命中即消失
+      break;
+    }
+  }
+  if (newDaggers.length) daggers.push(...newDaggers);
+  daggers = daggers.filter(d => d.life > 0);
+}
+
+function drawDaggers() {
+  for (const d of daggers) {
+    ctx.save();
+    ctx.globalAlpha = d.life / d.maxLife;
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.angle);
+    if (d.scale && d.scale !== 1) ctx.scale(d.scale, d.scale);
+    // 木刻偏移陰影
+    ctx.strokeStyle = 'rgba(26, 22, 18, 0.55)';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-10 + 1.5, 0 + 1.5); ctx.lineTo(12 + 1.5, 0 + 1.5); ctx.stroke();
+    // 刀刃（ink 色）
+    ctx.strokeStyle = COLORS.ink;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(12, 0); ctx.stroke();
+    // 刀柄（muted）
+    ctx.strokeStyle = COLORS.muted;
+    ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-4, 0); ctx.stroke();
+    // 刀柄護格（垂直短線）
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-4, -3.5); ctx.lineTo(-4, 3.5); ctx.stroke();
+    // 爆擊光效：刀尖 crit 色高光
+    if (d.hitSet.size === 0) { // 尚未命中
+      ctx.strokeStyle = 'rgba(95, 168, 156, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(14, 0); ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────
+// Phase 6：幻影目標輔助 + Combo + 幻影系統
+// ─────────────────────────────────────────
+/** 取得敵人追蹤目標座標（幻影技能啟用時分散 AI） */
+function getEnemyTarget(enemy) {
+  if (currentCharacter !== 'rogue' || phantoms.length === 0 || enemy.type === 'boss') {
+    return { tx: player.x, ty: player.y };
+  }
+  // 每 180 幀重新決定追誰
+  if (!enemy.decoyTimer || enemy.decoyTimer <= 0) {
+    enemy.decoyTimer = 180;
+    const alive = phantoms.filter(p => p.life > 0);
+    enemy.phantomRef = (Math.random() < 0.55 && alive.length > 0)
+      ? alive[Math.floor(Math.random() * alive.length)]
+      : null;
+  }
+  enemy.decoyTimer--;
+  if (enemy.phantomRef && enemy.phantomRef.life > 0) {
+    return { tx: enemy.phantomRef.x, ty: enemy.phantomRef.y };
+  }
+  return { tx: player.x, ty: player.y };
+}
+
+function addCombo() {
+  if (currentCharacter !== 'rogue' && currentCharacter !== 'necromancer') return;
+  comboCount++;
+  comboTimer = 120; // 2 秒窗口
+  if (comboCount > runStats.maxCombo) runStats.maxCombo = comboCount;
+  if (comboCount >= 3) {
+    addFloatText(player.x, player.y - 42, `☠ ${comboCount}x COMBO!`, COLORS.xp, 'crit');
+  }
+}
+
+function updatePhantoms() {
+  const phantomLv = player.skillLevels['phantom'] || 0;
+  if (phantomLv > 0) {
+    phantomSpawnTimer++;
+    const spawnInterval = Math.max(120, 240 - phantomLv * 40);
+    if (phantomSpawnTimer >= spawnInterval) {
+      phantomSpawnTimer = 0;
+      const angle = Math.random() * Math.PI * 2;
+      const dist  = 50 + Math.random() * 60;
+      phantoms.push({
+        x: player.x + Math.cos(angle) * dist,
+        y: player.y + Math.sin(angle) * dist,
+        life: 300, maxLife: 300,
+        driftAngle: Math.random() * Math.PI * 2
+      });
+    }
+  }
+  for (const p of phantoms) {
+    p.life--;
+    // 緩慢漂移
+    p.x += Math.cos(p.driftAngle * 1.3) * 0.4;
+    p.y += Math.sin(p.driftAngle * 1.7) * 0.4;
+  }
+  phantoms = phantoms.filter(p => p.life > 0);
+}
+
+function drawPhantoms() {
+  for (const p of phantoms) {
+    const alpha = (p.life / p.maxLife) * 0.38;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    // 幻影：淡色人形輪廓（woodblock 無 shadowBlur）
+    ctx.fillStyle = COLORS.muted;
+    ctx.strokeStyle = COLORS.bg;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, 11, 16, p.driftAngle, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(p.x + Math.cos(p.driftAngle) * 9, p.y + Math.sin(p.driftAngle) * 9, 7, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    // 血色腰帶（盜賊幻影特徵）
+    ctx.strokeStyle = 'rgba(123, 26, 26, 0.7)';
+    ctx.lineWidth = 2.5;
+    const rx = -Math.sin(p.driftAngle), ry = Math.cos(p.driftAngle);
+    ctx.beginPath();
+    ctx.moveTo(p.x - rx * 10, p.y - ry * 10);
+    ctx.lineTo(p.x + rx * 10, p.y + ry * 10);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────
 // V3：武器進化系統
 // ─────────────────────────────────────────
 const EVOLUTION_DEFS = [
@@ -1078,7 +1919,9 @@ const EVOLUTION_DEFS = [
 ];
 
 function checkEvolutions() {
-  for (const evo of EVOLUTION_DEFS) {
+  const evoDefs = currentCharacter === 'mage'  ? MAGE_EVOLUTION_DEFS  :
+                  currentCharacter === 'rogue' ? ROGUE_EVOLUTION_DEFS : EVOLUTION_DEFS;
+  for (const evo of evoDefs) {
     if (player.evolutions[evo.id]) continue;
     const allMet = Object.entries(evo.requires).every(
       ([id, req]) => (player.skillLevels[id] || 0) >= req
@@ -1222,12 +2065,19 @@ const player = {
   ghostOrbTimer: 0,
   areaBombRadius: 0,
   chainSlashLevel: 0,
+  critChance: 0.15,  // P2：爆擊率（15% base）
 
   // V3 新增
   evolutions: {},
   soulScytheActive: false,
   hellfireActive: false,
   stormChainActive: false,
+
+  // Phase 6：盜賊衝刺屬性
+  dashActive: 0,       // 衝刺剩餘幀數
+  dashCooldown: 0,     // 衝刺冷卻剩餘幀數
+  dashVx: 0,           // 衝刺速度 X
+  dashVy: 0,           // 衝刺速度 Y
 
   update() {
     let dx = 0, dy = 0;
@@ -1237,7 +2087,10 @@ const player = {
     if (keys['d'] || keys['D'] || keys['ArrowRight'])  dx += 1;
 
     // 搖桿輸入：鍵盤無輸入時生效（dead-zone 0.15）
-    if (dx === 0 && dy === 0 && joyMove.active) {
+    // Phase 6：衝刺中跳過普通移動
+    if (currentCharacter === 'rogue' && this.dashActive > 0) {
+      // 衝刺中，位移由衝刺系統接管（後面處理）
+    } else if (dx === 0 && dy === 0 && joyMove.active) {
       const mag = Math.hypot(joyMove.x, joyMove.y);
       if (mag > 0.15) {
         this.x += joyMove.x * this.speed;
@@ -1262,6 +2115,47 @@ const player = {
 
     if (this.invincible > 0) this.invincible--;
 
+    // 法師魔法彈自動發射
+    if (currentCharacter === 'mage') {
+      mageFireTimer++;
+      const interval = Math.max(20, 50 - (player.skillLevels['bolt_speed'] || 0) * 12);
+      if (mageFireTimer >= interval) { mageFireTimer = 0; fireMagicBolt(); }
+    }
+
+    // Phase 6：盜賊衝刺 + 自動投擲匕首
+    if (currentCharacter === 'rogue') {
+      // 冷卻倒計時
+      if (this.dashCooldown > 0) this.dashCooldown--;
+
+      // 觸發衝刺（Shift 鍵 / 搖桿快推）
+      const dashMaxCd = Math.max(90, 180 - (player.skillLevels['dodge'] || 0) * 30);
+      const joyDash   = joyAim.active && Math.hypot(joyAim.x, joyAim.y) > 0.8;
+      if ((keys['Shift'] || joyDash) && this.dashCooldown <= 0 && this.dashActive <= 0) {
+        const len = Math.hypot(dx, dy);
+        this.dashVx = len > 0 ? (dx / len) * 10 : Math.cos(this.bladeAngle) * 10;
+        this.dashVy = len > 0 ? (dy / len) * 10 : Math.sin(this.bladeAngle) * 10;
+        this.dashActive   = 14;   // 14 幀≈0.23s，位移合計≈140px
+        this.dashCooldown = dashMaxCd;
+        addParticles(this.x, this.y, COLORS.blood, 12);
+      }
+
+      // 衝刺位移（全程無敵）
+      if (this.dashActive > 0) {
+        this.dashActive--;
+        this.x += this.dashVx;
+        this.y += this.dashVy;
+        this.x = Math.max(this.radius + 2, Math.min(canvas.width  - this.radius - 2, this.x));
+        this.y = Math.max(this.radius + 2, Math.min(canvas.height - this.radius - 2, this.y));
+        this.invincible = Math.max(this.invincible, 2);
+      }
+
+      // 自動投擲匕首（combo 越高投越快）
+      rogueDaggerTimer++;
+      const comboBonusInt  = Math.min(30, comboCount * 5);
+      const daggerInterval = Math.max(25, 45 - comboBonusInt);
+      if (rogueDaggerTimer >= daggerInterval) { rogueDaggerTimer = 0; fireDagger(); }
+    }
+
     // 鬼火計時（只在 playing 狀態）
     if (this.ghostOrbLevel > 0) {
       this.ghostOrbTimer++;
@@ -1272,6 +2166,46 @@ const player = {
         for (let i = 0; i < orbCount; i++) fireGhostOrb();
       }
     }
+  },
+
+  drawNecromancer() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    // 鐮刀弧形光效
+    const rot = this.bladeSpinAngle;
+    const arc = this.bladeArc;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, this.bladeRadius, rot - arc/2, rot + arc/2);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(200,148,26,0.10)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(200,148,26,0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // 黑袍身體
+    ctx.rotate(rot);
+    ctx.fillStyle = '#2A231C';
+    ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -15); ctx.lineTo(-9, 12); ctx.lineTo(9, 12); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.rotate(-rot);
+    // 骷髏頭
+    ctx.fillStyle = COLORS.enemy;
+    ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, -20, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 眼窩（血紅）
+    ctx.fillStyle = this.invincible > 0 ? COLORS.warning : COLORS.blood;
+    ctx.beginPath(); ctx.arc(-3, -22, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -22, 2, 0, Math.PI * 2); ctx.fill();
+    // 受傷閃爍
+    if (this.invincible > 0 && Math.floor(this.invincible / 6) % 2 === 0) {
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = COLORS.warning;
+      ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   },
 
   isInBladeZone(ex, ey, er) {
@@ -1290,12 +2224,18 @@ const player = {
     if (this.invincible > 0) return false;
     this.hp--;
     this.invincible = 70;
+    runStats.damageTaken++;
+    perfectClearFlag = false;
     addParticles(this.x, this.y, '#C44B1A', 6);
     SFX.play('hit');
     return true;
   },
 
   draw() {
+    if (currentCharacter === 'mage')        { this.drawMage();        return; }
+    if (currentCharacter === 'rogue')       { this.drawRogue();       return; }
+    if (currentCharacter === 'necromancer') { this.drawNecromancer(); return; }
+
     // 刀刃扇形光效
     ctx.save();
 
@@ -1547,7 +2487,7 @@ const player = {
     if (this.speed > 4.0) {
       ctx.save();
       ctx.globalAlpha = 0.18;
-      ctx.fillStyle = '#88FFCC';
+      ctx.fillStyle = COLORS.crit; // G3：改用設計系統鬼火青 #5FA89C
       ctx.beginPath();
       ctx.arc(this.x - Math.cos(this.bladeAngle) * 14,
               this.y - Math.sin(this.bladeAngle) * 14, this.radius * 0.7, 0, Math.PI * 2);
@@ -1564,6 +2504,251 @@ const player = {
     const hpRatio = this.hp / this.maxHp;
     ctx.fillStyle = hpRatio > 0.5 ? '#C8941A' : hpRatio > 0.25 ? '#C44B1A' : '#7B1A1A';
     ctx.fillRect(bx, by, barW * hpRatio, barH);
+  },
+
+  // ─── Phase 5：法師繪製 ───────────────────
+  drawMage() {
+    ctx.save();
+    if (this.invincible > 0 && Math.floor(this.invincible / 5) % 2 === 1) ctx.globalAlpha = 0.4;
+
+    const fx = Math.cos(this.bladeAngle);
+    const fy = Math.sin(this.bladeAngle);
+    const rx = -fy, ry = fx;
+
+    // 地面陰影
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+    ctx.beginPath();
+    ctx.ellipse(this.x + 5, this.y + this.radius + 2, this.radius * 0.85, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 法袍主體（骨粉色，木刻偏移陰影）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(this.x + 3, this.y + 3, this.radius * 0.80, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = COLORS.enemy;   // #D4C8A8 骨粉
+    ctx.strokeStyle = COLORS.bg;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, this.radius * 0.80, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    // 右側暗部（木刻立體感）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.22)';
+    ctx.beginPath();
+    ctx.ellipse(this.x + fx * this.radius * 0.18, this.y + fy * this.radius * 0.18, this.radius * 0.5, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+    ctx.fill();
+    // xp-glow 袍緣飾紋
+    ctx.strokeStyle = 'rgba(200, 148, 26, 0.42)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, this.radius * 0.80, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 法杖（面向方向延伸）
+    const staffTipX = this.x + fx * (this.radius + 24);
+    const staffTipY = this.y + fy * (this.radius + 24);
+    ctx.strokeStyle = '#6A4E1A';   // 深木棕
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(this.x - fx * 6, this.y - fy * 6);
+    ctx.lineTo(staffTipX, staffTipY);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    // xp-glow 杖身紋路
+    ctx.strokeStyle = 'rgba(200, 148, 26, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(this.x - fx * 4 + rx * 1, this.y - fy * 4 + ry * 1);
+    ctx.lineTo(staffTipX - fx * 6 + rx * 1, staffTipY - fy * 6 + ry * 1);
+    ctx.stroke();
+
+    // 法杖魔法球（crit 鬼火青，木刻偏移法）
+    const isVoidBurst = player.evolutions && player.evolutions['void_burst'];
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+    ctx.beginPath(); ctx.arc(staffTipX + 1.5, staffTipY + 1.5, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = isVoidBurst ? '#1A0A2A' : '#1C3A34';
+    ctx.beginPath(); ctx.arc(staffTipX, staffTipY, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = isVoidBurst ? COLORS.xp : COLORS.crit;
+    ctx.beginPath(); ctx.arc(staffTipX - 1.2, staffTipY - 1.2, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COLORS.ink;
+    ctx.globalAlpha *= 0.7;
+    ctx.beginPath(); ctx.arc(staffTipX - 2.8, staffTipY - 2.8, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = this.invincible > 0 && Math.floor(this.invincible / 5) % 2 === 1 ? 0.4 : 1;
+
+    // 法師頭部（深色兜帽）
+    const hx = this.x + fx * 5, hy = this.y + fy * 5 - 4;
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.5)';
+    ctx.beginPath(); ctx.arc(hx + 2, hy + 2, 9.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COLORS.surface;   // #2A231C 深色兜帽
+    ctx.strokeStyle = COLORS.bg;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(hx, hy, 9.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // xp-glow 帽緣
+    ctx.strokeStyle = 'rgba(200, 148, 26, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(hx, hy, 9.5, this.bladeAngle + Math.PI * 0.45, this.bladeAngle + Math.PI * 1.55); ctx.stroke();
+    // 雙眼（xp-glow 神秘光點）
+    for (const side of [-1, 1]) {
+      const ex = hx + rx * 3.5 * side;
+      const ey = hy + ry * 3.5 * side;
+      ctx.fillStyle = isVoidBurst ? COLORS.crit : COLORS.xp;
+      ctx.beginPath(); ctx.arc(ex, ey, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = COLORS.ink;
+      ctx.beginPath(); ctx.arc(ex - 0.5, ey - 0.5, 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 速度殘影（同騎士）
+    if (this.speed > 3.0) {
+      ctx.save();
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = COLORS.crit;
+      ctx.beginPath(); ctx.arc(this.x - fx * 14, this.y - fy * 14, this.radius * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // 血條
+    const barW = 36, barH = 5;
+    const bx = this.x - barW / 2;
+    const by = this.y - this.radius - 14;
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.7)';
+    ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+    const hpRatio = this.hp / this.maxHp;
+    ctx.fillStyle = hpRatio > 0.5 ? COLORS.xp : hpRatio > 0.25 ? COLORS.warning : COLORS.blood;
+    ctx.fillRect(bx, by, barW * hpRatio, barH);
+
+    ctx.restore();
+  },
+
+  // ─── Phase 6：盜賊繪製 ──────────────────
+  drawRogue() {
+    ctx.save();
+    if (this.invincible > 0 && Math.floor(this.invincible / 5) % 2 === 1) ctx.globalAlpha = 0.4;
+
+    const fx = Math.cos(this.bladeAngle);
+    const fy = Math.sin(this.bladeAngle);
+    const rx = -fy, ry = fx;  // 側向單位向量
+
+    // 地面陰影
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(this.x + 4, this.y + this.radius + 2, this.radius * 0.82, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 衝刺殘影（dashActive 中顯示）
+    if (this.dashActive > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = COLORS.blood;
+      ctx.beginPath();
+      ctx.ellipse(this.x - this.dashVx * 0.6, this.y - this.dashVy * 0.6,
+        this.radius * 0.75, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 身體主體（深色皮甲，木刻偏移陰影）
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(this.x + 3, this.y + 3, this.radius * 0.78, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2E1E14';    // 深棕皮甲
+    ctx.strokeStyle = COLORS.bg;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, this.radius * 0.78, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    // 暗部立體感
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(this.x + fx * this.radius * 0.2, this.y + fy * this.radius * 0.2,
+      this.radius * 0.48, this.radius, this.bladeAngle + Math.PI / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 血色腰帶 / 頭巾（blood 色橫條）
+    const beltW = this.radius * 0.82;
+    ctx.strokeStyle = COLORS.blood;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(this.x - rx * beltW, this.y - ry * beltW);
+    ctx.lineTo(this.x + rx * beltW, this.y + ry * beltW);
+    ctx.stroke();
+    // blood 腰帶高光
+    ctx.strokeStyle = 'rgba(196, 75, 26, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(this.x - rx * beltW * 0.7 - fx * 1.5, this.y - ry * beltW * 0.7 - fy * 1.5);
+    ctx.lineTo(this.x + rx * beltW * 0.7 - fx * 1.5, this.y + ry * beltW * 0.7 - fy * 1.5);
+    ctx.stroke();
+
+    // 頭部（兜帽，比法師更緊湊）
+    const hx = this.x + fx * this.radius * 0.55;
+    const hy = this.y + fy * this.radius * 0.55;
+    ctx.fillStyle = '#1A1208';    // 極深兜帽
+    ctx.strokeStyle = COLORS.bg;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(hx, hy, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 頭巾（blood 色弧線）
+    ctx.strokeStyle = COLORS.blood;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 9.5, this.bladeAngle + Math.PI * 0.6, this.bladeAngle + Math.PI * 1.4);
+    ctx.stroke();
+    // 眼睛（muted 色，冷靜）
+    for (const side of [-1, 1]) {
+      const ex = hx + rx * 3 * side;
+      const ey = hy + ry * 3 * side;
+      ctx.fillStyle = COLORS.muted;
+      ctx.beginPath(); ctx.arc(ex, ey, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 雙匕首（腰間兩側，斜向前方）
+    for (const side of [-1, 1]) {
+      const kx = this.x + rx * this.radius * 0.65 * side - fx * 4;
+      const ky = this.y + ry * this.radius * 0.65 * side - fy * 4;
+      const kAngle = this.bladeAngle + side * 0.4;
+      const kfx = Math.cos(kAngle), kfy = Math.sin(kAngle);
+      // 刀柄（muted）
+      ctx.strokeStyle = COLORS.muted;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(kx - kfx * 7, ky - kfy * 7);
+      ctx.lineTo(kx + kfx * 2, ky + kfy * 2);
+      ctx.stroke();
+      // 刀刃（ink）
+      ctx.strokeStyle = COLORS.ink;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(kx + kfx * 2, ky + kfy * 2);
+      ctx.lineTo(kx + kfx * 12, ky + kfy * 12);
+      ctx.stroke();
+    }
+
+    // 衝刺冷卻指示（玩家腳下小弧線）
+    if (this.dashCooldown > 0) {
+      const dashMaxCd = Math.max(90, 180 - (player.skillLevels['dodge'] || 0) * 30);
+      const cdRatio = this.dashCooldown / dashMaxCd;
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = COLORS.blood;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y + this.radius + 5, 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - cdRatio));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 血條
+    const barW2 = 36, barH2 = 5;
+    const bx2 = this.x - barW2 / 2;
+    const by2 = this.y - this.radius - 14;
+    ctx.fillStyle = 'rgba(26, 22, 18, 0.7)';
+    ctx.fillRect(bx2 - 1, by2 - 1, barW2 + 2, barH2 + 2);
+    const hpRatio2 = this.hp / this.maxHp;
+    ctx.fillStyle = hpRatio2 > 0.5 ? COLORS.xp : hpRatio2 > 0.25 ? COLORS.warning : COLORS.blood;
+    ctx.fillRect(bx2, by2, barW2 * hpRatio2, barH2);
+
+    ctx.restore();
   }
 };
 
@@ -1636,12 +2821,37 @@ class Enemy {
 
   update() {
     if (this.dead) { this.deathTimer++; return; }
+    const prevX = this.x, prevY = this.y; // Phase 5：冰牆減速用
     this.wobble += 0.12;
     if (this.hitCooldown > 0) this.hitCooldown--;
     if (this.flashTimer > 0) this.flashTimer--;
+    if (this.slowTimer && this.slowTimer > 0) this.slowTimer--;
 
-    const dx = player.x - this.x;
-    const dy = player.y - this.y;
+    // Phase 6：DoT 放血（每 60 幀掉血，不受 hitCooldown 影響）
+    if (this.dotBleedTimer && this.dotBleedTimer > 0) {
+      this.dotBleedTimer--;
+      if (this.dotBleedTimer % 60 === 0 && !this.dead) {
+        this.hp -= 1;
+        this.flashTimer = 8;
+        addFloatText(this.x, this.y - this.radius - 4, '🩸-1', COLORS.blood);
+        if (this.hp <= 0) { killEnemy(this, false); return; }
+      }
+    }
+    // Phase 6：DoT 毒刃（每 60 幀掉血）
+    if (this.dotPoisonTimer && this.dotPoisonTimer > 0) {
+      this.dotPoisonTimer--;
+      if (this.dotPoisonTimer % 60 === 0 && !this.dead) {
+        this.hp -= 1;
+        this.flashTimer = 8;
+        addFloatText(this.x, this.y - this.radius - 4, '☠-1', COLORS.muted);
+        if (this.hp <= 0) { killEnemy(this, false); return; }
+      }
+    }
+
+    // Phase 6：幻影目標分派（盜賊角色 + 幻影技能生效時）
+    const { tx, ty } = getEnemyTarget(this);
+    const dx = tx - this.x;
+    const dy = ty - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (this.type === 'boss') {
@@ -1710,6 +2920,13 @@ class Enemy {
         this.x += (dx / dist) * this.speed + perpX * Math.sin(this.wobble + this.id) * 0.3;
         this.y += (dy / dist) * this.speed + perpY * Math.sin(this.wobble + this.id) * 0.3;
       }
+    }
+
+    // Phase 5：冰牆減速（回退移動量）
+    if (this.slowTimer > 0) {
+      const slowMult = (player.evolutions && player.evolutions['permafrost']) ? 0.38 : 0.52;
+      this.x = prevX + (this.x - prevX) * slowMult;
+      this.y = prevY + (this.y - prevY) * slowMult;
     }
   }
 
@@ -2335,12 +3552,13 @@ class Enemy {
 // ─────────────────────────────────────────
 let floatTexts = [];
 
-function addFloatText(x, y, text, color = '#C8941A') {
-  floatTexts.push({ x, y, text, color, life: 50, vy: -1.5 });
+// style: 'normal' | 'crit'
+function addFloatText(x, y, text, color = '#C8941A', style = 'normal') {
+  floatTexts.push({ x, y, text, color, style, life: 50, maxLife: 50, vy: -1.5 });
 }
 
 // ─────────────────────────────────────────
-// 背景繪製
+// 背景繪製（Offscreen Canvas 預烘焙，每幀只 drawImage）
 // ─────────────────────────────────────────
 const grassOffsets = [];
 for (let i = 0; i < 200; i++) {
@@ -2353,27 +3571,32 @@ for (let i = 0; i < 200; i++) {
   });
 }
 
+// 預烘焙靜態背景（格線 + 草葉）到 offscreen canvas
+const bgCanvas = document.createElement('canvas');
+bgCanvas.width  = canvas.width;
+bgCanvas.height = canvas.height;
+const bgCtx = bgCanvas.getContext('2d');
+bgCtx.fillStyle = COLORS.bg;
+bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+bgCtx.strokeStyle = 'rgba(122, 106, 82, 0.18)';
+bgCtx.lineWidth = 1;
+for (let x = 0; x < bgCanvas.width;  x += 50) {
+  bgCtx.beginPath(); bgCtx.moveTo(x, 0); bgCtx.lineTo(x, bgCanvas.height); bgCtx.stroke();
+}
+for (let y = 0; y < bgCanvas.height; y += 50) {
+  bgCtx.beginPath(); bgCtx.moveTo(0, y); bgCtx.lineTo(bgCanvas.width, y); bgCtx.stroke();
+}
+bgCtx.lineWidth = 1;
+for (const g of grassOffsets) {
+  bgCtx.strokeStyle = `rgba(50, 140, 50, ${g.alpha})`;
+  bgCtx.beginPath();
+  bgCtx.moveTo(g.x, g.y);
+  bgCtx.lineTo(g.x + Math.cos(g.angle) * g.len, g.y + Math.sin(g.angle) * g.len);
+  bgCtx.stroke();
+}
+
 function drawBackground() {
-  ctx.fillStyle = '#1A1612';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.strokeStyle = 'rgba(122, 106, 82, 0.18)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x < canvas.width;  x += 50) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-  }
-  for (let y = 0; y < canvas.height; y += 50) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-  }
-
-  ctx.lineWidth = 1;
-  for (const g of grassOffsets) {
-    ctx.strokeStyle = `rgba(50, 140, 50, ${g.alpha})`;
-    ctx.beginPath();
-    ctx.moveTo(g.x, g.y);
-    ctx.lineTo(g.x + Math.cos(g.angle) * g.len, g.y + Math.sin(g.angle) * g.len);
-    ctx.stroke();
-  }
+  ctx.drawImage(bgCanvas, 0, 0); // 單次 blit，比每幀繪製快數倍
 }
 
 // ─────────────────────────────────────────
@@ -2414,8 +3637,24 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.fillText(`擊殺: ${killCount}`, canvas.width / 2, 33);
 
+  // Phase 6：盜賊 Combo 顯示（畫面中間，擊殺數下方）
+  if (currentCharacter === 'rogue' && comboCount >= 2) {
+    const fadeAlpha = Math.min(1, comboTimer / 30);
+    ctx.save();
+    ctx.globalAlpha = fadeAlpha;
+    const comboSize = Math.min(32, 18 + comboCount);
+    ctx.font = `bold ${comboSize}px "Pirata One", cursive`;
+    ctx.fillStyle = COLORS.xp;
+    ctx.strokeStyle = COLORS.bg;
+    ctx.lineWidth = 4;
+    ctx.textAlign = 'center';
+    ctx.strokeText(`${comboCount}× COMBO`, canvas.width / 2, 65);
+    ctx.fillText(`${comboCount}× COMBO`, canvas.width / 2, 65);
+    ctx.restore();
+  }
+
   // ── 右上資訊面板（整合：時間 / Lv / 敵人數 / 技能清單）──
-  const alive = enemies.filter(e => !e.dead).length;
+  const alive = aliveEnemyCount; // 由 gameLoop 每幀快取，避免重複 filter
   const owned = Object.entries(player.skillLevels).filter(([, lv]) => lv > 0);
   const panelW = 178;
   const headerH = 86;             // 時間 + Lv/敵人 兩列
@@ -2482,8 +3721,10 @@ function drawHUD() {
 
     // 技能格子（尖角邊框）
     const gridY = panelY + headerH + 18;
+    const activePool = currentCharacter === 'mage'  ? MAGE_SKILL_POOL  :
+                       currentCharacter === 'rogue' ? ROGUE_SKILL_POOL : SKILL_POOL;
     owned.forEach(([id, lv], i) => {
-      const skill = SKILL_POOL.find(s => s.id === id);
+      const skill = activePool.find(s => s.id === id);
       if (!skill) return;
       const col = i % skillCols, row = Math.floor(i / skillCols);
       const cx = panelX + 8 + col * skillCellW + skillCellW / 2;
@@ -2565,7 +3806,618 @@ function drawHUD() {
 }
 
 // ─────────────────────────────────────────
+// P3：低血 Vignette（HP < 30% 時螢幕邊緣 ember 脈動）
+// ─────────────────────────────────────────
+function drawLowBloodVignette() {
+  if (player.hp / player.maxHp >= 0.3) return;
+  const pulse = 0.5 + Math.sin(frameCount * 0.105) * 0.5; // ~1Hz at 60fps
+  const alpha = 0.12 + pulse * 0.14;
+  const grad = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.28,
+    canvas.width / 2, canvas.height / 2, canvas.width * 0.75
+  );
+  grad.addColorStop(0, 'rgba(196, 75, 26, 0)');
+  grad.addColorStop(1, `rgba(196, 75, 26, ${alpha})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// ─────────────────────────────────────────
+// P4：升級 ink-bloom 動畫（800ms 暗墨擴散 + xp-glow 環圈）
+// ─────────────────────────────────────────
+function drawInkBloom() {
+  if (inkBloomTimer <= 0) return;
+  const progress  = 1 - inkBloomTimer / 48;
+  const fadeAlpha = inkBloomTimer < 12 ? inkBloomTimer / 12 : 1;
+  const radius    = 30 + progress * 340;
+
+  // 暗墨擴散圓
+  const bloom = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, 0,
+    canvas.width / 2, canvas.height / 2, radius
+  );
+  bloom.addColorStop(0,    `rgba(26, 22, 18, ${fadeAlpha * 0.5})`);
+  bloom.addColorStop(0.38, `rgba(26, 22, 18, ${fadeAlpha * 0.28})`);
+  bloom.addColorStop(1,    'rgba(26, 22, 18, 0)');
+  ctx.fillStyle = bloom;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // xp-glow 雙環（progress > 55% 時淡入）
+  if (progress > 0.55) {
+    const ringAlpha = Math.min((progress - 0.55) / 0.45, 1) * fadeAlpha;
+    ctx.globalAlpha = ringAlpha * 0.55;
+    ctx.strokeStyle = COLORS.xp;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height / 2, radius * 0.62, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = ringAlpha * 0.25;
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height / 2, radius * 0.62 + 14, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  inkBloomTimer--;
+}
+
+// ─────────────────────────────────────────
 // 開始畫面
+// ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// 選角畫面（Phase 5：goToCharSelect / checkCharSelectClick / drawCharSelectScreen）
+// ─────────────────────────────────────────
+function goToCharSelect() {
+  // ── 死後審判：儲存本局統計並發放墓誌銘金幣 ──
+  if (state === 'gameover' || state === 'victory') {
+    runStats.level = level;
+    runStats.time  = gameTime;
+    lastRunStats   = { ...runStats };
+    lsSet('lastRunStats', lastRunStats);
+    const earned = Math.floor(runStats.kills / 5)
+                 + (level - 1) * 2
+                 + (bossDefeated ? 20 : 0)
+                 + (perfectClearFlag && bossDefeated ? 15 : 0)
+                 + 1; // 最少 1 枚
+    tombCoins += earned;
+    if (state === 'gameover') {
+      deathCount++;
+      lsSet('deathCount', deathCount);
+    }
+    savePersistentData();
+  }
+  state = 'charselect';
+  BGM.stop();
+  enemies = []; particles = []; floatTexts = [];
+  bloodDecals = []; expGems = []; ghostOrbs = [];
+  arrows = []; magicBolts = []; iceWalls = [];
+  evolutionAnnouncements = []; inkBloomTimer = 0;
+  updateJoystickVisibility();
+}
+
+function checkCharSelectClick(cx, cy) {
+  const cardW = 180, cardH = 320, cardY = 130, gap = 18;
+  const cw = canvas.width, ch = canvas.height;
+  const totalW = cardW * 3 + gap * 2;
+  const card1X = (cw - totalW) / 2;
+  const card2X = card1X + cardW + gap;
+  const card3X = card2X + cardW + gap;
+  const card4X = card3X + cardW + gap;
+  // 石板升級按鈕
+  if (cx >= cw/2 - 175 && cx <= cw/2 - 25 && cy >= ch - 50 && cy <= ch - 18) {
+    state = 'tablet'; return;
+  }
+  // 圖鑑按鈕
+  if (cx >= cw/2 + 25 && cx <= cw/2 + 175 && cy >= ch - 50 && cy <= ch - 18) {
+    state = 'codex'; return;
+  }
+  // 角色卡
+  if (cx >= card1X && cx <= card1X + cardW && cy >= cardY && cy <= cardY + cardH) {
+    currentCharacter = 'knight'; resetGame();
+  } else if (cx >= card2X && cx <= card2X + cardW && cy >= cardY && cy <= cardY + cardH) {
+    currentCharacter = 'mage'; resetGame();
+  } else if (cx >= card3X && cx <= card3X + cardW && cy >= cardY && cy <= cardY + cardH) {
+    currentCharacter = 'rogue'; resetGame();
+  } else if (deathCount >= 5 && cx >= card4X && cx <= card4X + cardW && cy >= cardY && cy <= cardY + cardH) {
+    currentCharacter = 'necromancer'; resetGame();
+  }
+}
+
+function _drawKnightIcon() {
+  ctx.fillStyle = COLORS.ink; ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1.5;
+  // 頭
+  ctx.beginPath(); ctx.arc(0, -30, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // 身
+  ctx.fillRect(-8, -20, 16, 28); ctx.strokeRect(-8, -20, 16, 28);
+  // 腿
+  ctx.fillRect(-7, 8, 6, 18); ctx.strokeRect(-7, 8, 6, 18);
+  ctx.fillRect(1, 8, 6, 18); ctx.strokeRect(1, 8, 6, 18);
+  // 劍（右手）
+  ctx.strokeStyle = COLORS.xp; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(12, -20); ctx.lineTo(30, -48); ctx.stroke();
+  // 護手
+  ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(14, -28); ctx.lineTo(22, -28); ctx.stroke();
+  // 盾（左手）
+  ctx.fillStyle = COLORS.muted; ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(-18, -8, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+}
+
+function _drawMageIcon() {
+  // 袍子
+  ctx.fillStyle = COLORS.ink; ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-11, -16); ctx.lineTo(-15, 26); ctx.lineTo(15, 26); ctx.lineTo(11, -16);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // 兜帽（分兩步：半圓弧 + 方塊）
+  ctx.beginPath(); ctx.arc(0, -28, 13, Math.PI, 0); ctx.fill(); ctx.stroke();
+  ctx.fillRect(-13, -28, 26, 14); ctx.strokeRect(-13, -28, 26, 14);
+  // 眼睛（金色）
+  ctx.fillStyle = COLORS.xp;
+  ctx.beginPath(); ctx.arc(-4, -30, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(4, -30, 2.5, 0, Math.PI * 2); ctx.fill();
+  // 法杖
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(14, 22); ctx.lineTo(28, -30); ctx.stroke();
+  // 法球
+  ctx.fillStyle = COLORS.crit; ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(30, -34, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#AAEEE8';
+  ctx.beginPath(); ctx.arc(27, -37, 2.5, 0, Math.PI * 2); ctx.fill();
+}
+
+function _drawRogueIcon() {
+  // 身體（深色皮甲）
+  ctx.fillStyle = '#2E1E14'; ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-10, -16); ctx.lineTo(-14, 24); ctx.lineTo(14, 24); ctx.lineTo(10, -16);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // 頭（兜帽）
+  ctx.fillStyle = '#1A1208'; ctx.strokeStyle = COLORS.bg; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(0, -26, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // 血色頭巾
+  ctx.strokeStyle = COLORS.blood; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-10, -26); ctx.lineTo(10, -26); ctx.stroke();
+  // 眼睛（muted 色）
+  ctx.fillStyle = COLORS.muted;
+  ctx.beginPath(); ctx.arc(-4, -27, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(4, -27, 2, 0, Math.PI * 2); ctx.fill();
+  // 腰帶（blood）
+  ctx.strokeStyle = COLORS.blood; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.moveTo(-13, 2); ctx.lineTo(13, 2); ctx.stroke();
+  // 雙匕首
+  for (const side of [-1, 1]) {
+    const kx = 10 * side;
+    ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(kx, 4); ctx.lineTo(kx + side * 10, -14); ctx.stroke();
+    ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(kx, 10); ctx.lineTo(kx, 4); ctx.stroke();
+  }
+}
+
+function _drawCharCard(x, y, w, h, charType) {
+  const isKnight = charType === 'knight';
+  const isRogue  = charType === 'rogue';
+  const cx = x + w / 2;
+  const hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+
+  ctx.save();
+  // 卡片底色
+  ctx.fillStyle = hovered ? '#2E2820' : COLORS.surface;
+  ctx.fillRect(x, y, w, h);
+  // 卡片邊框
+  ctx.strokeStyle = hovered ? COLORS.xp : COLORS.muted;
+  ctx.lineWidth = hovered ? 2.5 : 1;
+  ctx.strokeRect(x, y, w, h);
+
+  // 角色名
+  ctx.fillStyle = hovered ? COLORS.xp : COLORS.ink;
+  ctx.font = `bold 30px ${FONTS.display}`;
+  ctx.textAlign = 'center';
+  ctx.fillText(isKnight ? '騎士' : isRogue ? '盜賊' : isNecro ? '死靈師' : '法師', cx, y + 42);
+  // 英文副標
+  ctx.fillStyle = COLORS.muted;
+  ctx.font = `italic 13px ${FONTS.body}`;
+  ctx.fillText(isKnight ? 'Knight' : isRogue ? 'Rogue' : isNecro ? 'Necromancer' : 'Mage', cx, y + 60);
+
+  // 圖示區
+  const iconBoxY = y + 72, iconBoxH = 130;
+  ctx.fillStyle = '#181410';
+  ctx.fillRect(x + 10, iconBoxY, w - 20, iconBoxH);
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 10, iconBoxY, w - 20, iconBoxH);
+
+  ctx.save();
+  ctx.translate(cx, iconBoxY + iconBoxH / 2 + 5);
+  const isNecro = charType === 'necromancer';
+  if (isKnight) _drawKnightIcon(); else if (isRogue) _drawRogueIcon(); else if (isNecro) _drawNecroIcon(); else _drawMageIcon();
+  ctx.restore();
+
+  // 分隔線
+  const lineY = iconBoxY + iconBoxH + 10;
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + 15, lineY); ctx.lineTo(x + w - 15, lineY); ctx.stroke();
+
+  // 數值
+  const statY = lineY + 18;
+  ctx.font = `14px ${FONTS.body}`;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = COLORS.muted;
+  ctx.fillText('HP  :', x + 18, statY);
+  ctx.fillText('SPD:', x + 18, statY + 22);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = COLORS.xp;
+  const hpVal  = isKnight ? '5' : (isRogue || isNecro) ? '4' : '3';
+  const spdVal = isKnight ? '3.2' : isRogue ? '4.2' : isNecro ? '3.0' : '2.8';
+  ctx.fillText(hpVal,  x + w - 18, statY);
+  ctx.fillText(spdVal, x + w - 18, statY + 22);
+
+  // 風格描述
+  const descY = statY + 52;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = COLORS.muted;
+  ctx.font = `italic 12px ${FONTS.body}`;
+  const lines = isKnight
+    ? ['近戰旋轉刀刃', '強韌、直接、耐打']
+    : isRogue
+    ? ['匕首投擲＋閃避', '連殺 Combo 爆發']
+    : isNecro
+    ? ['鐮刀＋幽靈幻魂', '詛咒陣列、死靈收割']
+    : ['遠程魔法轟炸', '脆弱但爆發力強'];
+  ctx.fillText(lines[0], cx, descY);
+  ctx.fillText(lines[1], cx, descY + 18);
+
+  // hover 提示
+  if (hovered) {
+    ctx.fillStyle = COLORS.xp;
+    ctx.font = `bold 16px ${FONTS.display}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('▶ 選擇', cx, y + h - 12);
+  }
+  ctx.restore();
+}
+
+function drawCharSelectScreen() {
+  const cw = canvas.width, ch = canvas.height;
+  // 全螢幕暗色背景
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, cw, ch);
+  // 格線（羊皮紙紋）
+  ctx.strokeStyle = 'rgba(122,106,82,0.08)';
+  ctx.lineWidth = 1;
+  for (let gx = 0; gx < cw; gx += 60) {
+    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, ch); ctx.stroke();
+  }
+  for (let gy = 0; gy < ch; gy += 60) {
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(cw, gy); ctx.stroke();
+  }
+  // 標題
+  ctx.fillStyle = COLORS.xp;
+  ctx.font = `bold 52px ${FONTS.display}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('☠ 選擇英雄 ☠', cw / 2, 78);
+  ctx.fillStyle = COLORS.muted;
+  ctx.font = `italic 17px ${FONTS.body}`;
+  ctx.fillText('Choose your champion', cw / 2, 106);
+
+  // 三張角色卡（cardW=180，gap=18，三卡總寬=576，置中於 1100px canvas）
+  const cardW = 180, cardH = 320, cardY = 130, gap = 18;
+  const totalW = cardW * 3 + gap * 2;
+  const card1X = (cw - totalW) / 2;
+  const card2X = card1X + cardW + gap;
+  const card3X = card2X + cardW + gap;
+  _drawCharCard(card1X, cardY, cardW, cardH, 'knight');
+  _drawCharCard(card2X, cardY, cardW, cardH, 'mage');
+  _drawCharCard(card3X, cardY, cardW, cardH, 'rogue');
+
+  // ── 死靈師（隱藏角色：累積死亡 >= 5 次解鎖）──
+  if (deathCount >= 5) {
+    const necroX = card3X + cardW + gap;
+    _drawCharCard(necroX, cardY, cardW, cardH, 'necromancer');
+  } else {
+    // 未解鎖：顯示問號卡片
+    const necroX = card3X + cardW + gap;
+    ctx.fillStyle = COLORS.surface;
+    ctx.fillRect(necroX + 3, cardY + 3, cardW, cardH);
+    ctx.fillStyle = '#1A1612';
+    ctx.fillRect(necroX, cardY, cardW, cardH);
+    ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+    ctx.strokeRect(necroX, cardY, cardW, cardH);
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = `bold 48px ${FONTS.display}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('?', necroX + cardW / 2, cardY + cardH / 2 + 16);
+    ctx.font = `italic 12px ${FONTS.body}`;
+    ctx.fillText('累積死亡 5 次解鎖', necroX + cardW / 2, cardY + cardH - 20);
+  }
+
+  // ── 墓誌銘金幣 ──
+  ctx.textAlign = 'right';
+  ctx.font = `bold 18px ${FONTS.display}`;
+  ctx.fillStyle = COLORS.xp;
+  ctx.fillText(`☽ ${tombCoins} 枚墓誌銘金幣`, cw - 20, 34);
+
+  // ── 石板升級 + 圖鑑按鈕 ──
+  ctx.textAlign = 'center';
+  ctx.font = `bold 16px ${FONTS.display}`;
+  // 石板按鈕
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(cw/2 - 175, ch - 50, 150, 32);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(cw/2 - 177, ch - 52, 150, 32);
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(cw/2 - 175, ch - 50, 150, 32);
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+  ctx.strokeRect(cw/2 - 175, ch - 50, 150, 32);
+  ctx.fillStyle = COLORS.xp;
+  ctx.fillText('⚗ 石板升級', cw/2 - 100, ch - 28);
+  // 圖鑑按鈕
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(cw/2 + 25, ch - 50, 150, 32);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(cw/2 + 23, ch - 52, 150, 32);
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(cw/2 + 25, ch - 50, 150, 32);
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+  ctx.strokeRect(cw/2 + 25, ch - 50, 150, 32);
+  ctx.fillStyle = COLORS.ink;
+  ctx.fillText('📜 敵人圖鑑', cw/2 + 100, ch - 28);
+
+  // ── 底部說明 ──
+  ctx.fillStyle = COLORS.muted;
+  ctx.font = `italic 13px ${FONTS.body}`;
+  ctx.fillText(
+    isTouchDevice ? '點擊卡片選擇角色'
+      : '點擊卡片  ·  1 騎士  ·  2 法師  ·  3 盜賊  ·  4 死靈師',
+    cw / 2, ch - 58
+  );
+  ctx.font = `italic 12px ${FONTS.body}`;
+  ctx.fillText('🎵 M 鍵靜音', cw / 2, ch - 10);
+}
+
+// ─────────────────────────────────────────
+// 死靈師角色圖示（選角畫面）
+// ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// 石板升級畫面（state = 'tablet'）
+// ─────────────────────────────────────────
+let tabletClickRects = []; // 每幀重建，用於點擊偵測
+
+function drawTabletScreen() {
+  const cw = canvas.width, ch = canvas.height;
+  tabletClickRects = [];
+
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, cw, ch);
+  // 格線
+  ctx.strokeStyle = 'rgba(122,106,82,0.06)'; ctx.lineWidth = 1;
+  for (let gx = 0; gx < cw; gx += 60) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,ch); ctx.stroke(); }
+  for (let gy = 0; gy < ch; gy += 60) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(cw,gy); ctx.stroke(); }
+
+  // 標題
+  ctx.textAlign = 'center';
+  ctx.font = `bold 44px ${FONTS.display}`;
+  ctx.fillStyle = COLORS.xp;
+  ctx.fillText('☽ 石板升級', cw / 2, 60);
+  ctx.font = `italic 16px ${FONTS.body}`;
+  ctx.fillStyle = COLORS.muted;
+  ctx.fillText(`墓誌銘金幣：${tombCoins} 枚`, cw / 2, 86);
+
+  // 升級卡片（每排 3 個）
+  const cardW = 170, cardH = 130, gap = 16;
+  const totalW = 3 * cardW + 2 * gap;
+  const startX = (cw - totalW) / 2;
+  const startY = 110;
+
+  TABLET_DEFS.forEach((def, idx) => {
+    const col = idx % 3, row = Math.floor(idx / 3);
+    const cx = startX + col * (cardW + gap);
+    const cy = startY + row * (cardH + gap);
+    const bought = stoneTabletUpgrades[def.id] || 0;
+    const maxed  = bought >= def.maxBuy;
+    const canAfford = tombCoins >= def.cost;
+
+    // 陰影
+    ctx.fillStyle = 'rgba(26,22,18,0.6)';
+    ctx.fillRect(cx+3, cy+3, cardW, cardH);
+    // 背景
+    ctx.fillStyle = COLORS.surface;
+    ctx.fillRect(cx, cy, cardW, cardH);
+    // 邊框
+    ctx.strokeStyle = maxed ? COLORS.xp : (canAfford ? COLORS.muted : '#3A3028');
+    ctx.lineWidth = maxed ? 2 : 1;
+    ctx.strokeRect(cx, cy, cardW, cardH);
+
+    // 圖示
+    ctx.font = '28px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(def.icon, cx + 10, cy + 38);
+
+    // 名稱
+    ctx.font = `bold 16px ${FONTS.display}`;
+    ctx.fillStyle = maxed ? COLORS.xp : (canAfford ? COLORS.ink : COLORS.muted);
+    ctx.fillText(def.name, cx + 46, cy + 32);
+
+    // 描述
+    ctx.font = `italic 12px ${FONTS.body}`;
+    ctx.fillStyle = COLORS.muted;
+    const words = def.desc.split(''); let line = '', lineY = cy + 52;
+    for (let c of words) {
+      const test = line + c;
+      if (ctx.measureText(test).width > cardW - 16) {
+        ctx.textAlign = 'left'; ctx.fillText(line, cx+8, lineY); lineY += 16; line = c;
+      } else { line = test; }
+    }
+    ctx.fillText(line, cx + 8, lineY);
+
+    // 費用 / 狀態
+    ctx.textAlign = 'left';
+    ctx.font = `bold 14px ${FONTS.display}`;
+    if (maxed) {
+      ctx.fillStyle = COLORS.xp;
+      ctx.fillText('✓ 已購', cx + 8, cy + cardH - 10);
+    } else {
+      ctx.fillStyle = canAfford ? COLORS.xp : '#5A4030';
+      ctx.fillText(`${def.cost} 幣  (${bought}/${def.maxBuy})`, cx + 8, cy + cardH - 10);
+    }
+
+    if (!maxed) tabletClickRects.push({ x:cx, y:cy, w:cardW, h:cardH, def });
+  });
+
+  // 返回按鈕
+  const backY = startY + 2 * (cardH + gap) + 14;
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(cw/2 - 80, backY, 160, 34);
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+  ctx.strokeRect(cw/2 - 80, backY, 160, 34);
+  ctx.font = `italic 15px ${FONTS.body}`;
+  ctx.fillStyle = COLORS.muted; ctx.textAlign = 'center';
+  ctx.fillText('← 返回選角', cw/2, backY + 22);
+  tabletClickRects.push({ x: cw/2-80, y: backY, w: 160, h: 34, def: { id: '__back__' } });
+}
+
+function handleTabletClick(cx, cy) {
+  for (const rect of tabletClickRects) {
+    if (cx >= rect.x && cx <= rect.x + rect.w && cy >= rect.y && cy <= rect.y + rect.h) {
+      const def = rect.def;
+      if (def.id === '__back__') { state = 'charselect'; return; }
+      const bought = stoneTabletUpgrades[def.id] || 0;
+      if (bought >= def.maxBuy) return;
+      if (tombCoins < def.cost) return;
+      tombCoins -= def.cost;
+      stoneTabletUpgrades[def.id] = bought + 1;
+      savePersistentData();
+      return;
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+// 敵人圖鑑畫面（state = 'codex'）
+// ─────────────────────────────────────────
+function drawCodexScreen() {
+  const cw = canvas.width, ch = canvas.height;
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, cw, ch);
+  // 格線
+  ctx.strokeStyle = 'rgba(122,106,82,0.06)'; ctx.lineWidth = 1;
+  for (let gx = 0; gx < cw; gx += 60) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,ch); ctx.stroke(); }
+  for (let gy = 0; gy < ch; gy += 60) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(cw,gy); ctx.stroke(); }
+
+  // 標題
+  ctx.textAlign = 'center';
+  ctx.font = `bold 44px ${FONTS.display}`;
+  ctx.fillStyle = COLORS.ink;
+  ctx.fillText('骨格圖鑑', cw / 2, 60);
+  ctx.font = `italic 15px ${FONTS.body}`;
+  ctx.fillStyle = COLORS.muted;
+  ctx.fillText(`已解鎖 ${codexUnlocked.size} / 5`, cw / 2, 85);
+
+  const types = ['skeleton','zombie','elite_skeleton','skeleton_archer','boss'];
+  const cardW = 190, cardH = 200, gap = 16;
+  const totalW = 3 * cardW + 2 * gap;
+  const startX = (cw - totalW) / 2;
+  const startY = 105;
+
+  types.forEach((type, idx) => {
+    const col = idx % 3, row = Math.floor(idx / 3);
+    const cx = startX + col * (cardW + gap);
+    const cy = startY + row * (cardH + gap);
+    const unlocked = codexUnlocked.has(type);
+    const entry = CODEX_ENTRIES[type];
+    const kills = codexKillCounts[type] || 0;
+
+    // 陰影 + 背景
+    ctx.fillStyle = 'rgba(26,22,18,0.5)';
+    ctx.fillRect(cx+3, cy+3, cardW, cardH);
+    ctx.fillStyle = COLORS.surface;
+    ctx.fillRect(cx, cy, cardW, cardH);
+    ctx.strokeStyle = unlocked ? COLORS.muted : '#2A231C'; ctx.lineWidth = 1;
+    ctx.strokeRect(cx, cy, cardW, cardH);
+
+    if (!unlocked) {
+      ctx.fillStyle = COLORS.muted;
+      ctx.font = `bold 32px ${FONTS.display}`;
+      ctx.textAlign = 'center';
+      ctx.fillText('?', cx + cardW/2, cy + cardH/2 + 12);
+      ctx.font = `italic 12px ${FONTS.body}`;
+      ctx.fillText('擊殺後解鎖', cx + cardW/2, cy + cardH - 14);
+      return;
+    }
+
+    // 名稱
+    ctx.textAlign = 'center';
+    ctx.font = `bold 18px ${FONTS.display}`;
+    ctx.fillStyle = COLORS.xp;
+    ctx.fillText(entry.name, cx + cardW/2, cy + 22);
+
+    // 英文副標
+    ctx.font = `italic 12px ${FONTS.body}`;
+    ctx.fillStyle = COLORS.muted;
+    ctx.fillText(entry.title, cx + cardW/2, cy + 38);
+
+    // 威脅星級
+    let stars = '';
+    for (let s = 0; s < 5; s++) stars += s < entry.threat ? '☠' : '·';
+    ctx.font = `13px ${FONTS.body}`;
+    ctx.fillStyle = entry.threat >= 5 ? COLORS.warning : (entry.threat >= 3 ? COLORS.xp : COLORS.muted);
+    ctx.fillText(stars, cx + cardW/2, cy + 54);
+
+    // 描述文字（自動換行）
+    ctx.font = `italic 12px ${FONTS.body}`;
+    ctx.fillStyle = COLORS.ink; ctx.textAlign = 'left';
+    const words = entry.desc.split('');
+    let line = '', lineY = cy + 72;
+    for (let c of words) {
+      const test = line + c;
+      if (ctx.measureText(test).width > cardW - 18) {
+        ctx.fillText(line, cx+9, lineY); lineY += 16; line = c;
+      } else { line = test; }
+    }
+    ctx.fillText(line, cx + 9, lineY);
+
+    // 擊殺統計
+    ctx.textAlign = 'center';
+    ctx.font = `italic 12px ${FONTS.body}`;
+    ctx.fillStyle = COLORS.muted;
+    ctx.fillText(`累計擊殺 ${kills} 隻`, cx + cardW/2, cy + cardH - 10);
+  });
+
+  // 返回
+  const backY = startY + 2 * (cardH + gap) + 10;
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(cw/2-80, backY, 160, 34);
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth=1;
+  ctx.strokeRect(cw/2-80, backY, 160, 34);
+  ctx.font = `italic 15px ${FONTS.body}`;
+  ctx.fillStyle = COLORS.muted; ctx.textAlign = 'center';
+  ctx.fillText('← 返回選角', cw/2, backY+22);
+}
+
+function _drawNecroIcon() {
+  // 黑袍身體
+  ctx.fillStyle = '#2A231C'; ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -12); ctx.lineTo(-10, 20); ctx.lineTo(10, 20); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // 骷髏頭
+  ctx.beginPath(); ctx.arc(0, -22, 9, 0, Math.PI * 2);
+  ctx.fillStyle = COLORS.enemy; ctx.fill(); ctx.stroke();
+  // 眼窩
+  ctx.fillStyle = COLORS.blood;
+  ctx.beginPath(); ctx.arc(-3, -24, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3, -24, 2, 0, Math.PI * 2); ctx.fill();
+  // 鐮刀
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(6, -10); ctx.lineTo(18, -28); ctx.stroke();
+  ctx.strokeStyle = COLORS.xp; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(18, -22, 8, Math.PI * 0.3, Math.PI * 1.1);
+  ctx.stroke();
+}
+
+// ─────────────────────────────────────────
+// _drawCharCard - 支援死靈師
 // ─────────────────────────────────────────
 function drawStartScreen() {
   ctx.fillStyle = 'rgba(26, 22, 18, 0.88)';
@@ -2645,9 +4497,10 @@ function drawBossHpBar() {
   ctx.textAlign = 'center';
   ctx.lineWidth = 3;
   ctx.strokeStyle = COLORS.bg;
-  ctx.strokeText(`☠ 骷髏大魔王  ${boss.hp} / ${boss.maxHp}`, canvas.width / 2, by + barH - 9);
+  const bossName = bossRevivesSeen >= 5 ? '老頭子' : '骷髏大魔王';
+  ctx.strokeText(`☠ ${bossName}  ${boss.hp} / ${boss.maxHp}`, canvas.width / 2, by + barH - 9);
   ctx.fillStyle = COLORS.ink;
-  ctx.fillText(`☠ 骷髏大魔王  ${boss.hp} / ${boss.maxHp}`, canvas.width / 2, by + barH - 9);
+  ctx.fillText(`☠ ${bossName}  ${boss.hp} / ${boss.maxHp}`, canvas.width / 2, by + barH - 9);
 }
 
 // ─────────────────────────────────────────
@@ -2731,42 +4584,121 @@ function drawVictoryScreen() {
   ctx.font = '22px "IM Fell English", serif';
   ctx.fillText(grade, canvas.width / 2, canvas.height / 2 + 110);
 
+  // ── 完美破關彩蛋 ──
+  if (perfectClearFlag) {
+    ctx.font = `bold 22px ${FONTS.display}`;
+    ctx.lineWidth = 3; ctx.strokeStyle = COLORS.bg;
+    ctx.strokeText('✦ 無傷奇跡 ✦', canvas.width / 2, canvas.height / 2 + 130);
+    ctx.fillStyle = COLORS.xp;
+    ctx.fillText('✦ 無傷奇跡 ✦', canvas.width / 2, canvas.height / 2 + 130);
+    // 金邊環
+    ctx.strokeStyle = COLORS.xp; ctx.lineWidth = 2; ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height / 2, 210, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
   // 重玩提示
-  ctx.fillStyle = '#C8941A';
-  ctx.font = 'bold 20px "Pirata One", cursive';
-  ctx.fillText('點擊或按 R 重新開始', canvas.width / 2, canvas.height / 2 + 150);
+  ctx.fillStyle = COLORS.xp;
+  ctx.font = `bold 20px ${FONTS.display}`;
+  ctx.fillText('點擊或按 R 重新開始', canvas.width / 2, canvas.height / 2 + (perfectClearFlag ? 160 : 150));
 }
 
 // ─────────────────────────────────────────
 // 遊戲結束畫面
 // ─────────────────────────────────────────
 function drawGameOverScreen() {
-  ctx.fillStyle = 'rgba(26, 22, 18, 0.85)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const cw = canvas.width, ch = canvas.height;
+  ctx.fillStyle = 'rgba(26, 22, 18, 0.92)';
+  ctx.fillRect(0, 0, cw, ch);
 
-  ctx.fillStyle = '#C44B1A';
-  ctx.font = 'bold 64px "Pirata One", cursive';
+  // ── 標題 ──
+  ctx.font = `bold 52px ${FONTS.display}`;
   ctx.textAlign = 'center';
-  ctx.fillText('你被殺死了！', canvas.width / 2, canvas.height / 2 - 80);
+  ctx.lineWidth = 4; ctx.strokeStyle = COLORS.bg;
+  ctx.strokeText('此英靈已入冊', cw / 2, 74);
+  ctx.fillStyle = COLORS.warning;
+  ctx.fillText('此英靈已入冊', cw / 2, 74);
 
-  ctx.fillStyle = '#C8941A';
-  ctx.font = 'bold 32px "Pirata One", cursive';
-  ctx.fillText(`最終擊殺數：${killCount}`, canvas.width / 2, canvas.height / 2 - 15);
+  // ── 分隔線 ──
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1; ctx.globalAlpha = 0.4;
+  ctx.beginPath(); ctx.moveTo(cw/2 - 220, 90); ctx.lineTo(cw/2 + 220, 90); ctx.stroke();
+  ctx.globalAlpha = 1;
 
-  ctx.fillStyle = '#C8941A';
-  ctx.font = 'bold 22px "Pirata One", cursive';
-  ctx.fillText(`到達等級：${level}`, canvas.width / 2, canvas.height / 2 + 25);
+  // ── 本局統計面板 ──
+  const cur = { kills: killCount, level, time: gameTime, maxCombo: runStats.maxCombo, dmg: runStats.damageTaken };
+  const last = lastRunStats;
+  const panelX = cw / 2 - 200, panelW = 400;
 
-  let grade = killCount >= 50 ? '傳說割草機 🏆' :
-              killCount >= 30 ? '骷髏剋星 💀' :
-              killCount >= 15 ? '半吊子農夫 🌾' : '嫩芽 🌱';
-  ctx.fillStyle = '#E8DCC4';
-  ctx.font = '24px "IM Fell English", serif';
-  ctx.fillText(grade, canvas.width / 2, canvas.height / 2 + 65);
+  function statRow(label, curVal, lastVal, y) {
+    ctx.textAlign = 'left';
+    ctx.font = `italic 16px ${FONTS.body}`;
+    ctx.fillStyle = COLORS.muted;
+    ctx.fillText(label, panelX + 8, y);
 
-  ctx.fillStyle = '#C8941A';
-  ctx.font = 'bold 22px "Pirata One", cursive';
-  ctx.fillText('點擊或按 R 重新開始', canvas.width / 2, canvas.height / 2 + 115);
+    ctx.textAlign = 'right';
+    ctx.font = `bold 20px ${FONTS.display}`;
+    ctx.fillStyle = COLORS.ink;
+    ctx.fillText(String(curVal), panelX + panelW - 55, y);
+
+    if (last !== null && lastVal !== undefined) {
+      const diff = (typeof curVal === 'number' && typeof lastVal === 'number') ? curVal - lastVal : 0;
+      if (diff !== 0) {
+        ctx.font = `14px ${FONTS.body}`;
+        ctx.fillStyle = diff > 0 ? COLORS.xp : COLORS.warning;
+        ctx.fillText((diff > 0 ? '▲' : '▼') + Math.abs(diff), panelX + panelW - 8, y);
+      }
+    }
+  }
+
+  // 面板背景
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(panelX, 100, panelW, 170);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(panelX - 2, 98, panelW + 4, 174);
+  ctx.fillStyle = COLORS.surface;
+  ctx.fillRect(panelX, 100, panelW, 170);
+  ctx.strokeStyle = COLORS.muted; ctx.lineWidth = 1;
+  ctx.strokeRect(panelX, 100, panelW, 170);
+
+  const mins = Math.floor(cur.time / 60 / 60);
+  const secs = Math.floor(cur.time / 60) % 60;
+  const timeStr = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  const lastMins = last ? Math.floor(last.time / 60 / 60) : 0;
+  const lastSecs = last ? Math.floor(last.time / 60) % 60 : 0;
+
+  statRow('⚔  擊殺數', cur.kills,    last ? last.kills    : undefined, 128);
+  statRow('★  到達等級', cur.level,  last ? last.level    : undefined, 158);
+  statRow('⏱  生存時間', timeStr,    null, 188);
+  statRow('⚡  最高連殺', cur.maxCombo, last ? last.maxCombo : undefined, 218);
+  statRow('🩸  受傷次數', cur.dmg,   last ? last.damageTaken : undefined, 248);
+
+  if (last === null) {
+    ctx.textAlign = 'center';
+    ctx.font = `italic 13px ${FONTS.body}`;
+    ctx.fillStyle = COLORS.muted;
+    ctx.fillText('（首局，下次顯示對比）', cw / 2, 282);
+  }
+
+  // ── 獲得墓誌銘金幣 ──
+  const earned = Math.floor(cur.kills / 5) + (cur.level - 1) * 2 + 1;
+  ctx.textAlign = 'center';
+  ctx.font = `bold 20px ${FONTS.display}`;
+  ctx.fillStyle = COLORS.xp;
+  ctx.fillText(`獲得 ${earned} 枚墓誌銘金幣（累計：${tombCoins}）`, cw / 2, 298);
+
+  // ── 稱號 ──
+  const grade = cur.kills >= 80 ? '骨山戰神' : cur.kills >= 50 ? '骷髏剋星' :
+                cur.kills >= 25 ? '割草英雄' : '初出茅廬的勇者';
+  ctx.font = `22px ${FONTS.body}`;
+  ctx.fillStyle = COLORS.ink;
+  ctx.fillText(grade, cw / 2, 328);
+
+  // ── 重玩提示 ──
+  ctx.font = `bold 20px ${FONTS.display}`;
+  ctx.fillStyle = COLORS.xp;
+  ctx.fillText('點擊或按 R 重新開始', cw / 2, 366);
 }
 
 // ─────────────────────────────────────────
@@ -2786,7 +4718,8 @@ function getSpawnCount() {
 // ─────────────────────────────────────────
 function circleCollide(ax, ay, ar, bx, by, br) {
   const dx = bx - ax, dy = by - ay;
-  return Math.sqrt(dx * dx + dy * dy) < ar + br;
+  const r = ar + br;
+  return dx * dx + dy * dy < r * r; // 平方距離，免 sqrt
 }
 
 // ─────────────────────────────────────────
@@ -2796,6 +4729,21 @@ function circleCollide(ax, ay, ar, bx, by, br) {
 function killEnemy(e, isPrimary = true) {
   e.dead = true;
   killCount++;
+  runStats.kills++;
+  // 圖鑑解鎖追蹤
+  codexKillCounts[e.type] = (codexKillCounts[e.type] || 0) + 1;
+  if (!codexUnlocked.has(e.type)) {
+    codexUnlocked.add(e.type);
+    codexNewUnlock = { type: e.type, timer: 180 };
+    savePersistentData();
+  }
+  // 死靈師 soul_harvest：擊殺 15% 回血
+  if (currentCharacter === 'necromancer' && (player.skillLevels['soul_harvest'] || 0) > 0) {
+    if (Math.random() < 0.15 * (player.skillLevels['soul_harvest'])) {
+      player.hp = Math.min(player.hp + 1, player.maxHp);
+      addFloatText(player.x, player.y - 28, '+1 ☠', COLORS.xp);
+    }
+  }
   // V3：依怪物類型給分
   score += e.type === 'zombie' ? 2 : (e.type === 'elite_skeleton' ? 4 : (e.type === 'skeleton_archer' ? 3 : (e.type === 'boss' ? 100 : 1)));
 
@@ -2814,16 +4762,19 @@ function killEnemy(e, isPrimary = true) {
       for (let i = 0; i < 30; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 1.5 + Math.random() * 3;
+        const life = 40 + Math.random() * 30;
         particles.push({
           x: e.x, y: e.y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          life: 40 + Math.random() * 30,
+          life, maxLife: life,  // C1：用 size 而非 radius，與繪製一致
           color: ['#7B1A1A','#C44B1A','#E8DCC4'][Math.floor(Math.random()*3)],
-          radius: 3 + Math.random() * 4
+          size: 3 + Math.random() * 4
         });
       }
       addFloatText(e.x, e.y - e.radius - 20, '☠ 復活！', '#C44B1A');
+      bossRevivesSeen++;
+      lsSet('bossRevivesSeen', bossRevivesSeen);
       SFX.bossHurt && SFX.bossHurt();
       return;
     }
@@ -2834,13 +4785,14 @@ function killEnemy(e, isPrimary = true) {
     for (let i = 0; i < 80; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 2 + Math.random() * 6;
+      const life = 60 + Math.random() * 60;
       particles.push({
         x: e.x, y: e.y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        life: 60 + Math.random() * 60,
+        life, maxLife: life,  // C1：用 size 而非 radius
         color: ['#C8941A','#C44B1A','#7B1A1A','#E8DCC4'][Math.floor(Math.random()*4)],
-        radius: 4 + Math.random() * 5
+        size: 4 + Math.random() * 5
       });
     }
     state = 'victory';
@@ -2921,23 +4873,54 @@ function startGame() {
 }
 
 function resetGame() {
+  // 法師系統重置
+  magicBolts = []; beams = []; beamTimer = 0; mageFireTimer = 0;
+  iceWalls = []; iceWallTimer = 0;
+  // 盜賊系統重置
+  daggers = []; rogueDaggerTimer = 0;
+  phantoms = []; phantomSpawnTimer = 0;
+  comboCount = 0; comboTimer = 0;
+  player.dashActive = 0; player.dashCooldown = 0;
+
   player.x = canvas.width / 2;
   player.y = canvas.height / 2;
   player.invincible = 0;
   player.bladeSpinAngle = 0;
 
   // 技能效果屬性完整歸零（工程審查補充）
-  player.speed        = 3.2;
-  player.bladeRadius  = 55;
-  player.bladeArc     = Math.PI * 0.55;
+  // 角色分支：騎士 vs 法師
+  if (currentCharacter === 'mage') {
+    player.speed       = 2.8;
+    player.bladeRadius = 0;
+    player.bladeArc    = 0;
+    player.maxHp       = 3;
+    player.hp          = 3;
+  } else if (currentCharacter === 'rogue') {
+    player.speed       = 4.2;
+    player.bladeRadius = 0;
+    player.bladeArc    = 0;
+    player.maxHp       = 4;
+    player.hp          = 4;
+  } else if (currentCharacter === 'necromancer') {
+    player.speed       = 3.0;
+    player.bladeRadius = 65;   // 稍大的鐮刀範圍
+    player.bladeArc    = Math.PI * 0.70; // 寬弧鐮刀
+    player.maxHp       = 4;
+    player.hp          = 4;
+  } else { // knight
+    player.speed       = 3.2;
+    player.bladeRadius = 55;
+    player.bladeArc    = Math.PI * 0.55;
+    player.maxHp       = 5;
+    player.hp          = 5;
+  }
   player.magnetRange  = 80;
-  player.maxHp        = 5;
-  player.hp           = 5;
   player.skillLevels  = {};
   player.ghostOrbLevel  = 0;
   player.ghostOrbTimer  = 0;
   player.areaBombRadius = 0;
   player.chainSlashLevel = 0;
+  player.critChance     = 0.15;
 
   score = 0;
   killCount = 0;
@@ -2959,6 +4942,8 @@ function resetGame() {
   gameTime = 0;
   arrows = [];
   evolutionAnnouncements = [];
+  inkBloomTimer = 0;
+  aliveEnemyCount = 0;
   player.evolutions = {};
   player.soulScytheActive = false;
   player.hellfireActive = false;
@@ -2967,6 +4952,28 @@ function resetGame() {
   // 大魔王重置
   bossSpawned = false;
   bossDefeated = false;
+  bossRevived = false;
+
+  // ── 本局統計重置 ──
+  runStats = { kills:0, level:1, time:0, maxCombo:0, damageTaken:0 };
+  perfectClearFlag = true;
+  actPhase = 0;
+  actBannerTimer = 0;
+  codexNewUnlock = null;
+
+  // ── 套用石板升級 ──
+  if (currentCharacter === 'knight' && stoneTabletUpgrades['knight_blade']) {
+    const n = stoneTabletUpgrades['knight_blade'];
+    for (let i = 0; i < n; i++) player.bladeArc = Math.min(player.bladeArc * 1.05, Math.PI * 0.95);
+  }
+  if (currentCharacter === 'necromancer' && stoneTabletUpgrades['necro_arc']) {
+    const n = stoneTabletUpgrades['necro_arc'];
+    for (let i = 0; i < n; i++) player.bladeArc = Math.min(player.bladeArc * 1.05, Math.PI * 0.95);
+  }
+  // bonus_level：自動升一級
+  if (stoneTabletUpgrades['bonus_level']) {
+    exp = expToNext(1);
+  }
 
   hideUpgradeMenu();
 
@@ -3056,22 +5063,44 @@ function gameLoop() {
     gameTime++; // V3：遊戲計時
     player.update();
 
-    // 大魔王：遊戲 5 分鐘後（18000 frames = 300 秒 × 60fps）
-    if (gameTime >= 10800 && !bossSpawned) {
+    // ── 三幕制轉場 ──
+    if (actBannerTimer > 0) actBannerTimer--;
+
+    // 第一幕 → 第二幕：累積 40 擊殺
+    if (actPhase === 0 && killCount >= 40) {
+      actPhase = 1;
+      actBannerTimer = 200;
+      addFloatText(canvas.width/2, canvas.height/2 - 50, '第二幕：腐敗森林', COLORS.xp, 'crit');
+    }
+    // 第二幕 → 第三幕：3 分鐘後大魔王登場
+    if (actPhase >= 1 && gameTime >= 10800 && !bossSpawned) {
       bossSpawned = true;
+      actPhase = 2;
+      actBannerTimer = 200;
       spawnEnemy('boss');
-      addFloatText(canvas.width / 2, canvas.height / 2 - 60, '☠ 大魔王降臨！', '#FF0000');
+      addFloatText(canvas.width/2, canvas.height/2 - 60, '☠ 第三幕：骷髏王廷', COLORS.warning, 'crit');
     }
 
-    // 生怪（大魔王登場後停止普通生怪）
-    if (!bossSpawned) {
+    // 生怪（第三幕持續生怪，密度降低）
+    if (!bossSpawned || actPhase >= 2) {
       spawnTimer++;
       if (spawnTimer >= spawnInterval) {
         spawnTimer = 0;
-        const n = getSpawnCount();
-        for (let i = 0; i < n; i++) spawnEnemy();
+        if (!bossSpawned) {
+          const n = getSpawnCount();
+          for (let i = 0; i < n; i++) spawnEnemy();
+        } else {
+          // 第三幕：每 2 次觸發才生一隻，維持戰場張力
+          if (Math.random() < 0.45) spawnEnemy();
+        }
         spawnInterval = Math.max(35, 110 - Math.floor(killCount / 5) * 4);
       }
+    }
+
+    // 圖鑑解鎖動畫計時
+    if (codexNewUnlock) {
+      codexNewUnlock.timer--;
+      if (codexNewUnlock.timer <= 0) codexNewUnlock = null;
     }
 
     // 更新敵人 + 碰撞
@@ -3081,7 +5110,12 @@ function gameLoop() {
       if (!e.dead) {
         // 刀刃命中（V3：使用 takeDamage，支援多 HP 怪物）
         if (player.isInBladeZone(e.x, e.y, e.radius)) {
-          if (e.takeDamage()) killEnemy(e, true); // 死亡才 killEnemy
+          // P2：爆擊判定
+          const isCrit = Math.random() < player.critChance;
+          if (isCrit) {
+            addFloatText(e.x, e.y - e.radius - 8, '⚡CRIT!', COLORS.crit, 'crit');
+          }
+          if (e.takeDamage(isCrit ? 2 : 1)) killEnemy(e, true); // 死亡才 killEnemy
         }
         // 被敵人撞到（非刀刃區）
         else if (circleCollide(player.x, player.y, player.radius, e.x, e.y, e.radius)) {
@@ -3095,6 +5129,13 @@ function gameLoop() {
 
     // 清除已完成死亡動畫的敵人
     enemies = enemies.filter(e => !e.dead || e.deathTimer < 26);
+
+    // 快取存活敵人數（供 HUD 使用，避免重複 filter）
+    aliveEnemyCount = enemies.reduce((n, e) => n + (e.dead ? 0 : 1), 0);
+
+    // 血跡淡出（5 秒 = 300 frames）
+    for (const d of bloodDecals) d.life--;
+    bloodDecals = bloodDecals.filter(d => d.life > 0);
 
     // 更新 EXP 寶石（lerp 吸取）
     for (const gem of expGems) {
@@ -3129,6 +5170,31 @@ function gameLoop() {
     // V3：更新箭矢
     updateArrows();
 
+    // Phase 5：法師 — 更新魔法彈 + 冰牆 + 光束
+    if (currentCharacter === 'mage') {
+      updateMagicBolts();
+      updateIceWalls();
+      // 以太光束進化：每 90 幀發射一道
+      if (player.evolutions && player.evolutions['aether_beam']) {
+        beamTimer++;
+        if (beamTimer >= 90) {
+          beamTimer = 0;
+          spawnBeam(player.x, player.y, player.bladeAngle);
+        }
+      }
+      updateBeams();
+    }
+
+    // Phase 6：盜賊 — 更新匕首 + 幻影 + combo 倒計時
+    if (currentCharacter === 'rogue') {
+      updateDaggers();
+      updatePhantoms();
+      if (comboTimer > 0) {
+        comboTimer--;
+        if (comboTimer <= 0) comboCount = 0;
+      }
+    }
+
     // 更新粒子
     for (const p of particles) {
       p.x += p.vx;
@@ -3154,8 +5220,10 @@ function gameLoop() {
   drawBackground();
 
   for (const d of bloodDecals) {
+    const fadeAlpha = d.alpha * 0.5 * (d.life / d.maxLife);
+    if (fadeAlpha < 0.01) continue;
     ctx.save();
-    ctx.globalAlpha = d.alpha * 0.5;
+    ctx.globalAlpha = fadeAlpha;
     ctx.fillStyle = d.type === 'skeleton' ? '#9E9E8E' : '#4A2A2A';
     ctx.beginPath();
     ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
@@ -3190,24 +5258,97 @@ function gameLoop() {
   // V3：箭矢
   drawArrows();
 
-  // 浮動文字
+  // Phase 5：法師 — 冰牆（地面）+ 魔法彈 + 光束（空中）
+  if (currentCharacter === 'mage') {
+    drawIceWalls();
+    drawMagicBolts();
+    drawBeams();
+  }
+
+  // Phase 6：盜賊 — 幻影（地面）+ 匕首（空中）
+  if (currentCharacter === 'rogue') {
+    drawPhantoms();
+    drawDaggers();
+  }
+
+  // 浮動文字（設計系統：IM Fell English / Pirata One，無 Arial）
   for (const t of floatTexts) {
     ctx.save();
-    ctx.globalAlpha = t.life / 50;
+    ctx.globalAlpha = t.life / (t.maxLife || 50);
     ctx.fillStyle = t.color;
-    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-    ctx.lineWidth = 3;
-    ctx.font = 'bold 18px Arial';
+    ctx.strokeStyle = '#1A1612';
     ctx.textAlign = 'center';
+    if (t.style === 'crit') {
+      ctx.font = '26px "Pirata One", cursive';
+      ctx.lineWidth = 4;
+    } else {
+      ctx.font = 'italic 18px "IM Fell English", serif';
+      ctx.lineWidth = 3;
+    }
     ctx.strokeText(t.text, t.x, t.y);
     ctx.fillText(t.text, t.x, t.y);
     ctx.restore();
   }
 
+  // P3：低血 vignette（在 HUD 下層，playing 中才顯示）
+  if (state === 'playing') drawLowBloodVignette();
+
   if (state === 'playing' || state === 'upgrade') drawHUD();
-  if (state === 'start')    drawStartScreen();
-  if (state === 'gameover') { drawHUD(); drawGameOverScreen(); }
-  if (state === 'victory')  { drawHUD(); drawVictoryScreen(); }
+  if (state === 'start')      drawStartScreen();
+  if (state === 'charselect') drawCharSelectScreen();
+  if (state === 'gameover')   { drawHUD(); drawGameOverScreen(); }
+  if (state === 'victory')    { drawHUD(); drawVictoryScreen(); }
+  if (state === 'tablet')     drawTabletScreen();
+  if (state === 'codex')      drawCodexScreen();
+
+  // ── 幕次轉場 Banner（在最上層）──
+  if (state === 'playing' && actBannerTimer > 0) {
+    const alpha = Math.min(1, actBannerTimer / 30) * Math.min(1, (actBannerTimer) / 30);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `bold 36px ${FONTS.display}`;
+    ctx.textAlign = 'center';
+    const bannerText = actPhase === 1 ? '第二幕：腐敗森林' : '第三幕：骷髏王廷';
+    const bannerColor = actPhase === 1 ? COLORS.xp : COLORS.warning;
+    ctx.lineWidth = 4; ctx.strokeStyle = COLORS.bg;
+    ctx.strokeText(bannerText, canvas.width/2, canvas.height/2 - 20);
+    ctx.fillStyle = bannerColor;
+    ctx.fillText(bannerText, canvas.width/2, canvas.height/2 - 20);
+    ctx.restore();
+  }
+
+  // ── 圖鑑解鎖動畫（右下角飛入小卡）──
+  if (codexNewUnlock && codexNewUnlock.timer > 0) {
+    const entry = CODEX_ENTRIES[codexNewUnlock.type];
+    if (entry) {
+      const t = codexNewUnlock.timer;
+      const alpha = Math.min(1, t / 20) * Math.min(1, (t - 0) / 20);
+      const slideX = canvas.width - 220 + Math.max(0, (40 - t) * 4);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = COLORS.surface;
+      ctx.fillRect(slideX + 2, canvas.height - 78, 190, 60);
+      ctx.fillStyle = COLORS.bg;
+      ctx.fillRect(slideX, canvas.height - 80, 190, 60);
+      ctx.fillStyle = COLORS.surface;
+      ctx.fillRect(slideX, canvas.height - 80, 190, 60);
+      ctx.strokeStyle = COLORS.xp; ctx.lineWidth = 1;
+      ctx.strokeRect(slideX, canvas.height - 80, 190, 60);
+      ctx.font = `bold 13px ${FONTS.display}`;
+      ctx.fillStyle = COLORS.xp; ctx.textAlign = 'left';
+      ctx.fillText('📜 圖鑑解鎖！', slideX + 10, canvas.height - 58);
+      ctx.font = `italic 14px ${FONTS.body}`;
+      ctx.fillStyle = COLORS.ink;
+      ctx.fillText(entry.name, slideX + 10, canvas.height - 38);
+      ctx.font = `italic 12px ${FONTS.body}`;
+      ctx.fillStyle = COLORS.muted;
+      ctx.fillText(entry.title, slideX + 10, canvas.height - 22);
+      ctx.restore();
+    }
+  }
+
+  // P4：ink-bloom 升級特效（最上層，HUD 之上）
+  if (state === 'upgrade' || state === 'playing') drawInkBloom();
 
   updateJoystickVisibility();
 
