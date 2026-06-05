@@ -269,6 +269,38 @@
 
 ---
 
+## 🤖 Stage 8 · 內建 AUTOPILOT bot（✅ 騎士版完成，已通關 ×2）
+
+> 在 index.html 內建自動破關 bot，右上角「AUTO」齒輪面板控制（雕版風、無 emoji、半透明）。
+> 全部讀遊戲全域狀態（player/enemies/arrows/expGems…）→ 寫 joyMove + mouseX/Y 操控，獨立 rAF loop。
+
+### UI（#autopilot-panel + #sound-toggle，CSS 雕版風）
+- [x] 齒輪 AUTO 收起半透明、hover 清晰；點開展 LV1/LV2/LV3/LV4 + 技能自動/手動 + STOP
+- [x] 狀態 HUD（版本/角色/HP/擊殺/時間/幕次），全透明只留描邊文字
+- [x] **靜音開關**（右上喇叭 icon）：全域 `audioMuted` 旗標，BGM 淡入 + SFX 發聲都讀它（重開不恢復）
+
+### bot 版本（騎士，botVersion 控制；都繼承邊界排斥 + 撿 XP + 繞精英骷髏）
+- [x] **LV1** kiting，不躲箭（基準對照）
+- [x] **LV2** + 飛箭側向閃避（偵測 320px / 擦邊 44 / 權重 2.0）
+- [x] **LV3** 主動進攻清場：朝敵群質心推進繞圈，優先獵殺弓箭手（貼邊射手放棄改打人多）
+- [x] **LV4** = LV3 + 只鎖畫面內敵人（不追畫面外、不貼邊界）
+
+### 技能自動選（apAutoPick，動態優先序）
+- [x] 走割魂大鐮：`刀刃伸長 → 連鎖割 → 刀刃加寬`（核心保護）；湊齊後主攻連鎖割清群
+- [x] 護盾只在 HP≤3 搶；×2 雙倍卡「適度優先」（分層：保命 > 核心材料 > 其他含 ×2 前移）
+
+### 同場修掉的遊戲 bug
+- [x] **`isNecro` TDZ 崩潰**：選角畫面 `_drawCharCard` 在宣告前用 `isNecro` → 整個選角畫面只畫一張卡。宣告移到函式頂部修復。
+
+### 🔜 後續：LV5 盜賊衝刺無敵版
+> 騎士近戰打遠程有先天劣勢（箭速 4.5 > 移速 3.2，正面直射躲不掉）。真正機制突破是盜賊「閃避衝刺 14 幀無敵」直接穿箭雨。要做時讀盜賊機制（fireDagger 瞄準 / dash 觸發 / 三進化）。
+
+### 觸發語 / 操作
+- 開遊戲 → 右上 AUTO 點開選 LV → bot 自動選騎士開打。檔案就是 index.html，無需注入。
+- 改 bot 邏輯：搜 `initAutopilot` / `apComputeMove` / `apAutoPick`（在 index.html 結尾 `<script>` 內）。
+
+---
+
 ## 重要檔案位置
 
 - 設計聖經：[DESIGN.md](DESIGN.md)

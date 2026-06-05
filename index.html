@@ -279,6 +279,54 @@
       z-index: 20;
     }
     #tablet-overlay.open { display: block; }
+
+    /* ── AUTOPILOT bot 控制（雕版風 woodcut；無 emoji、零圓角、偏移陰影）── */
+    #autopilot-panel {
+      position: absolute; top: 108px; right: 8px; z-index: 25;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+      user-select: none;
+    }
+    .ap-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(42, 35, 28, 0.5); color: #E8DCC4;
+      border: 1px solid #7A6A52; border-radius: 0;
+      box-shadow: 2px 2px 0 rgba(26, 22, 18, 0.4);
+      padding: 6px 10px; cursor: pointer; line-height: 1;
+      font-family: 'Pirata One', cursive; font-size: 16px; letter-spacing: 0.05em;
+    }
+    .ap-btn:hover { border-color: #C8941A; color: #C8941A; }
+    .ap-btn svg { display: block; }
+    /* 收起態只留半透明齒輪圖示，hover 才清晰 */
+    #ap-toggle { background: transparent; border-color: transparent; box-shadow: none; opacity: 0.3; padding: 4px; }
+    #ap-toggle:hover { opacity: 1; }
+    /* 靜音開關：右上角半透明喇叭，靜音時顯示斜線 */
+    #sound-toggle {
+      position: absolute; top: 8px; right: 8px; z-index: 25;
+      background: transparent; border-color: transparent; box-shadow: none;
+      opacity: 0.3; padding: 4px;
+    }
+    #sound-toggle:hover { opacity: 1; }
+    #sound-toggle .snd-slash { display: none; }
+    #sound-toggle.muted { opacity: 0.6; }
+    #sound-toggle.muted .snd-wave { display: none; }
+    #sound-toggle.muted .snd-slash { display: block; }
+    #ap-menu { display: none; flex-direction: column; align-items: flex-end; gap: 6px; }
+    #ap-menu.open { display: flex; }
+    .ap-lv, .ap-stop, .ap-skill { min-width: 90px; justify-content: center; font-size: 15px; }
+    .ap-skill { font-family: 'IM Fell English', serif; font-size: 14px; }
+    .ap-btn.active { border: 2px solid #C8941A; color: #C8941A; }
+    .ap-stop { color: #C44B1A; }
+    .ap-stop:hover { border-color: #C44B1A; color: #C44B1A; }
+    #ap-hud {
+      display: none; min-width: 132px; text-align: right; white-space: pre;
+      background: transparent; color: #E8DCC4;
+      border: none; border-radius: 0;
+      box-shadow: none;
+      padding: 6px 10px; line-height: 1.5;
+      font-family: 'IM Fell English', serif; font-size: 12px;
+      text-shadow: 1px 1px 0 rgba(26, 22, 18, 0.9);
+    }
+    #ap-hud.show { display: block; }
   </style>
 </head>
 <body>
@@ -304,6 +352,34 @@
     <div id="upgrade-title">⬆ LEVEL UP! ⬆</div>
     <div id="upgrade-subtitle">選擇一項技能</div>
     <div id="skill-cards-container"></div>
+  </div>
+
+  <!-- 靜音開關（雕版風，hand-coded 喇叭線條，無 emoji）-->
+  <div id="sound-toggle" class="ap-btn" title="靜音 / 開聲">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 9v6h3.5L13 19V5L7.5 9H4z"></path>
+      <path class="snd-wave" d="M16 9.5a4 4 0 0 1 0 5 M18.6 7a8 8 0 0 1 0 10"></path>
+      <line class="snd-slash" x1="3.5" y1="3.5" x2="20.5" y2="20.5" stroke="#C44B1A"></line>
+    </svg>
+  </div>
+  <!-- AUTOPILOT bot 控制（雕版風，hand-coded 齒輪線條符號，無 emoji）-->
+  <div id="autopilot-panel">
+    <div id="ap-toggle" class="ap-btn" title="自動駕駛 bot（騎士）">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3.2"></circle>
+        <circle cx="12" cy="12" r="7.6" stroke-opacity="0.5"></circle>
+        <path d="M12 2.4v3 M12 18.6v3 M2.4 12h3 M18.6 12h3 M5.2 5.2l2.1 2.1 M16.7 16.7l2.1 2.1 M18.8 5.2l-2.1 2.1 M7.3 16.7l-2.1 2.1"></path>
+      </svg>
+    </div>
+    <div id="ap-menu">
+      <div class="ap-btn ap-lv" data-lv="1">LV1</div>
+      <div class="ap-btn ap-lv" data-lv="2">LV2</div>
+      <div class="ap-btn ap-lv" data-lv="3">LV3</div>
+      <div class="ap-btn ap-lv" data-lv="4">LV4</div>
+      <div class="ap-btn ap-skill active" id="ap-skill">技能：自動</div>
+      <div class="ap-btn ap-stop">STOP</div>
+    </div>
+    <div id="ap-hud"></div>
   </div>
 </div>
 
@@ -347,6 +423,8 @@ const FONTS = {
 // ─────────────────────────────────────────
 // 古堡幽靈背景音樂（Web Audio API 程序式合成）
 // ─────────────────────────────────────────
+let audioMuted = false;   // 全域靜音旗標（BGM + SFX 共用）
+
 const BGM = (() => {
   let ctx = null;
   let masterGain = null;
@@ -478,7 +556,7 @@ const BGM = (() => {
       startDrone();
       // 淡入
       masterGain.gain.cancelScheduledValues(ctx.currentTime);
-      masterGain.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 2.0); // 音量降低 30%
+      masterGain.gain.linearRampToValueAtTime(audioMuted ? 0 : 0.7, ctx.currentTime + 2.0); // 音量降低 30%（靜音時 0）
       scheduleInterval = setInterval(() => scheduleMelody(), 80);
       scheduleMelody();
     },
@@ -583,6 +661,7 @@ const SFX = (() => {
 
   // 單一音調
   function tone(freq, type, dur, vol = 0.3, delay = 0) {
+    if (audioMuted) return;
     const c = ac();
     const osc = c.createOscillator();
     const gain = c.createGain();
@@ -598,6 +677,7 @@ const SFX = (() => {
 
   // 白噪音（擊打感）
   function noise(dur, vol = 0.2) {
+    if (audioMuted) return;
     const c = ac();
     const buf = c.createBuffer(1, Math.floor(c.sampleRate * dur), c.sampleRate);
     const data = buf.getChannelData(0);
@@ -3998,6 +4078,7 @@ function _drawRogueIcon() {
 function _drawCharCard(x, y, w, h, charType) {
   const isKnight = charType === 'knight';
   const isRogue  = charType === 'rogue';
+  const isNecro  = charType === 'necromancer';
   const cx = x + w / 2;
   const hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
 
@@ -4029,7 +4110,6 @@ function _drawCharCard(x, y, w, h, charType) {
 
   ctx.save();
   ctx.translate(cx, iconBoxY + iconBoxH / 2 + 5);
-  const isNecro = charType === 'necromancer';
   if (isKnight) _drawKnightIcon(); else if (isRogue) _drawRogueIcon(); else if (isNecro) _drawNecroIcon(); else _drawMageIcon();
   ctx.restore();
 
@@ -5365,6 +5445,242 @@ function gameLoop() {
 // 啟動
 // ─────────────────────────────────────────
 gameLoop();
+
+// ═════════════════════════════════════════════════════════════
+// AUTOPILOT bot（內嵌版）— LV1 無躲箭 / LV2 加飛箭閃避
+//   右上 AUTO 面板控制。騎士專用：kiting 走位 + 自動選技能 + Boss 繞圈輸出。
+// ═════════════════════════════════════════════════════════════
+(function initAutopilot() {
+  let botRunning = false, botVersion = 0, restarting = false, autoSkill = true;
+
+  const panel  = document.getElementById('autopilot-panel');
+  const toggle = document.getElementById('ap-toggle');
+  const menu   = document.getElementById('ap-menu');
+  const hudEl  = document.getElementById('ap-hud');
+
+  toggle.addEventListener('click', () => menu.classList.toggle('open'));
+  panel.querySelectorAll('.ap-lv').forEach(b =>
+    b.addEventListener('click', () => startBot(parseInt(b.dataset.lv, 10))));
+  panel.querySelector('.ap-stop').addEventListener('click', stopBot);
+  const skillBtn = document.getElementById('ap-skill');
+  skillBtn.addEventListener('click', () => {
+    autoSkill = !autoSkill;
+    skillBtn.textContent = '技能：' + (autoSkill ? '自動' : '手動');
+    skillBtn.classList.toggle('active', autoSkill);
+  });
+
+  function startBot(v) {
+    botVersion = v;
+    panel.querySelectorAll('.ap-lv').forEach(b =>
+      b.classList.toggle('active', parseInt(b.dataset.lv, 10) === v));
+    hudEl.classList.add('show');
+    if (!botRunning) { botRunning = true; requestAnimationFrame(botTick); }
+  }
+  function stopBot() {
+    botRunning = false; botVersion = 0; joyMove.active = false;
+    panel.querySelectorAll('.ap-lv').forEach(b => b.classList.remove('active'));
+    hudEl.classList.remove('show');
+  }
+
+  const apDist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+  const apAlive = () => enemies.filter(e => !e.dead);
+  const apBoss  = () => enemies.find(e => e.type === 'boss' && !e.dead);
+  function apNorm(x, y) { const m = Math.hypot(x, y); return m < 0.0001 ? { x: 0, y: 0 } : { x: x / m, y: y / m }; }
+  function apNearest(es) {
+    let best = null, bd = Infinity;
+    for (const e of es) { const d = apDist(player.x, player.y, e.x, e.y); if (d < bd) { bd = d; best = e; } }
+    return best ? { e: best, d: bd } : null;
+  }
+  function apRepulsion(es, skip) {
+    let x = 0, y = 0;
+    for (const e of es) {
+      if (e === skip) continue;
+      const d = apDist(player.x, player.y, e.x, e.y);
+      if (d > 170 || d < 1) continue;
+      let w = 1 / (d * d) * 2600;
+      if (e.type === 'elite_skeleton') w *= 2.4;   // 厚血精英殺不死，繞更開避免損血
+      x += (player.x - e.x) / d * w; y += (player.y - e.y) / d * w;
+    }
+    return { x, y };
+  }
+  function apArrowDodge() {
+    let x = 0, y = 0;
+    if (typeof arrows === 'undefined') return { x, y };
+    for (const a of arrows) {
+      if (a.life <= 0) continue;
+      const toPx = player.x - a.x, toPy = player.y - a.y;
+      const d = Math.hypot(toPx, toPy);
+      if (d > 320 || d < 1) continue;          // 更早偵測，爭取橫移時間
+      const av = apNorm(a.vx, a.vy);
+      const proj = toPx * av.x + toPy * av.y;
+      if (proj <= 0) continue;
+      let pX = toPx - proj * av.x, pY = toPy - proj * av.y;
+      let pD = Math.hypot(pX, pY);
+      if (pD > 44) continue;
+      if (pD < 3) { pX = -av.y; pY = av.x; pD = 1; }
+      const urg = 1 + (320 - proj) / 45;       // 越近閃越急（分母小→更陡）
+      x += (pX / pD) * urg; y += (pY / pD) * urg;
+    }
+    return { x, y };
+  }
+  // 順路撿最近的經驗寶石（加速升級，低權重不蓋過保命）
+  function apXpPull() {
+    if (typeof expGems === 'undefined') return { x: 0, y: 0 };
+    let best = null, bd = Infinity;
+    for (const g of expGems) {
+      if (g.collected) continue;
+      const d = apDist(player.x, player.y, g.x, g.y);
+      if (d < bd) { bd = d; best = g; }
+    }
+    if (!best || bd > 220) return { x: 0, y: 0 };   // 太遠不特地繞去撿
+    return apNorm(best.x - player.x, best.y - player.y);
+  }
+  // 邊界排斥：離牆越近往場內推越用力，避免被擠進死角卡住
+  function apBoundaryPush() {
+    const margin = 130, k = 2.0;
+    let x = 0, y = 0;
+    const lx = player.x, rx = canvas.width - player.x;
+    const ty = player.y, by = canvas.height - player.y;
+    if (lx < margin) x += (margin - lx) / margin * k;   // 近左牆 → 往右
+    if (rx < margin) x -= (margin - rx) / margin * k;   // 近右牆 → 往左
+    if (ty < margin) y += (margin - ty) / margin * k;   // 近上牆 → 往下
+    if (by < margin) y -= (margin - by) / margin * k;   // 近下牆 → 往上
+    return { x, y };
+  }
+  // 敵人是否在畫面內（LV4 用：不追畫面外尚未入場的怪）
+  function apOnScreen(e) {
+    return e.x >= 0 && e.x <= canvas.width && e.y >= 0 && e.y <= canvas.height;
+  }
+  // LV3+ 攻擊模式：優先獵殺弓箭手，否則朝敵群質心推進 + 繞圈掃
+  function apAttackMove(es) {
+    const pool = (botVersion >= 4) ? es.filter(apOnScreen) : es;   // LV4：只鎖畫面內
+    // 優先獵殺弓箭手（遠程威脅源）；但逃到貼邊的射手放棄，改往人多處衝
+    const archers = pool.filter(e => e.type === 'skeleton_archer');
+    const tgt = archers.length ? apNearest(archers).e : null;
+    const wall = 70;
+    const tgtNearWall = tgt && (tgt.x < wall || tgt.x > canvas.width - wall || tgt.y < wall || tgt.y > canvas.height - wall);
+    if (tgt && !tgtNearWall && apDist(player.x, player.y, tgt.x, tgt.y) < 460) {
+      const d = apDist(player.x, player.y, tgt.x, tgt.y) || 1;
+      const toX = (tgt.x - player.x) / d, toY = (tgt.y - player.y) / d;
+      const engage = player.bladeRadius * 0.5;
+      const radial = (d - engage) * 0.08;                 // 更積極直撲射手
+      return { x: toX * radial - toY * 0.4, y: toY * radial + toX * 0.4 };
+    }
+    // 無（近距）弓箭手 → 朝敵群質心推進
+    let sx = 0, sy = 0, n = 0;
+    for (const e of pool) {
+      if (e.type === 'elite_skeleton') continue;   // 不主動往厚血精英衝
+      if (apDist(player.x, player.y, e.x, e.y) < 260) { sx += e.x; sy += e.y; n++; }
+    }
+    if (n === 0) {
+      const nr = pool.length ? apNearest(pool) : null;
+      if (nr) return apNorm(nr.e.x - player.x, nr.e.y - player.y);
+      return apNorm(canvas.width / 2 - player.x, canvas.height / 2 - player.y); // 畫面內無怪 → 回中心待命
+    }
+    const ccx = sx / n, ccy = sy / n;
+    const d = apDist(player.x, player.y, ccx, ccy) || 1;
+    const toX = (ccx - player.x) / d, toY = (ccy - player.y) / d;
+    const engage = player.bladeRadius * 0.6;            // 理想交戰距離（敵人在刀刃內）
+    const radial = (d - engage) * 0.06;                  // >engage 靠近 / <engage 微退
+    return { x: toX * radial - toY * 0.6, y: toY * radial + toX * 0.6 }; // 推進 + 繞圈
+  }
+  function apComputeMove() {
+    const es = apAlive(), cx = canvas.width / 2, cy = canvas.height / 2, boss = apBoss();
+    let mx, my;
+    if (boss) {
+      const desired = player.bladeRadius - 12;
+      const d = apDist(player.x, player.y, boss.x, boss.y) || 1;
+      const toX = (boss.x - player.x) / d, toY = (boss.y - player.y) / d;
+      const radial = (d - desired) * 0.05;
+      mx = toX * radial - toY; my = toY * radial + toX;
+      const rep = apRepulsion(es, boss); mx += rep.x; my += rep.y;
+    } else if (botVersion >= 3 && player.hp > 2) {
+      // LV3：血量健康時主動進攻清場
+      const atk = apAttackMove(es); mx = atk.x; my = atk.y;
+      const rep = apRepulsion(es, null); mx += rep.x * 0.4; my += rep.y * 0.4; // 輕度避免貼臉連撞
+    } else {
+      // LV1/LV2 kiting，或 LV3 低血退避保命
+      const rep = apRepulsion(es, null);
+      if (rep.x === 0 && rep.y === 0) {
+        const n = apNearest(es);
+        const m = n ? apNorm(n.e.x - player.x, n.e.y - player.y) : apNorm(cx - player.x, cy - player.y);
+        mx = m.x; my = m.y;
+      } else { mx = rep.x; my = rep.y; }
+    }
+    // 順路撿經驗（加速升級，間隙時往最近 XP 飄）
+    const xp = apXpPull(); mx += xp.x * 1.2; my += xp.y * 1.2;
+    // 邊界排斥（避免後期被逼到角落卡死）
+    const bp = apBoundaryPush(); mx += bp.x; my += bp.y;
+    if (botVersion >= 2) { const dg = apArrowDodge(); mx += dg.x * 2.0; my += dg.y * 2.0; }
+    return apNorm(mx, my);
+  }
+  function apAutoPick() {
+    const cards = document.querySelectorAll('#skill-cards-container .skill-card');
+    if (!cards.length) return;
+    // 先衝「割魂大鐮」（刀刃伸長+加寬）；沒材料可選才拿連鎖割。湊齊後主攻連鎖割清群
+    const sl = player.skillLevels || {};
+    const scytheReady = (sl['blade_radius'] || 0) >= 3 && (sl['blade_arc'] || 0) >= 3;
+    const base = scytheReady
+      ? ['chain_slash', 'player_speed', 'magnet', 'area_bomb', 'ghost_orb', 'blade_radius', 'blade_arc']
+      : ['blade_radius', 'chain_slash', 'blade_arc', 'player_speed', 'magnet', 'area_bomb', 'ghost_orb'];
+    // 護盾只在血量不夠（HP≤3）時才搶
+    const PRIORITY = (player.hp <= 3) ? ['armor', ...base] : [...base, 'armor'];
+    const pool = (typeof SKILL_POOL !== 'undefined') ? SKILL_POOL : [];
+    const n2id = {}; pool.forEach(s => { n2id[s.name] = s.id; });
+    // ×2 雙倍卡適度優先：保命(armor) > 進化核心材料 > 其他（其中 ×2 前移 2 位）
+    const coreIds = scytheReady ? ['chain_slash'] : ['blade_radius', 'chain_slash', 'blade_arc'];
+    const tierOf = (id) => (id === 'armor' && player.hp <= 3) ? 0 : (coreIds.includes(id) ? 1 : 2);
+    let best = cards[0], br = Infinity;
+    cards.forEach(c => {
+      const id = n2id[c.querySelector('.card-name')?.textContent?.trim()];
+      const rk = PRIORITY.indexOf(id); const rank = rk === -1 ? 50 : rk;
+      let eff = tierOf(id) * 1000 + rank;
+      if (tierOf(id) === 2 && c.classList.contains('double')) eff -= 2;   // 非核心 ×2 適度前移
+      if (eff < br) { br = eff; best = c; }
+    });
+    best.click();
+  }
+  function apFmt(f) { const s = Math.floor(f / 60); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+  function apUpdateHud() {
+    const boss = apBoss();
+    const phase = boss ? 'BOSS ' + Math.ceil(boss.hp) + '/' + boss.maxHp : (actPhase >= 1 ? '第二幕' : '第一幕');
+    const cn = { knight: '騎士', mage: '法師', rogue: '盜賊', necromancer: '死靈師' }[currentCharacter] || currentCharacter;
+    hudEl.textContent = 'AUTOPILOT LV' + botVersion + '\n' + cn + '  HP ' + (player ? player.hp : '-') + '/' + (player ? player.maxHp : '-') +
+      '\n擊殺 ' + killCount + '  ' + apFmt(gameTime) + '\n' + phase;
+  }
+  function botTick() {
+    if (!botRunning) return;
+    try {
+      if (state === 'charselect') { currentCharacter = 'knight'; resetGame(); }
+      else if (state === 'playing') {
+        const mv = apComputeMove();
+        joyMove.active = true; joyMove.x = mv.x; joyMove.y = mv.y;
+        const boss = apBoss();
+        const aimPool = (botVersion >= 4) ? apAlive().filter(apOnScreen) : apAlive();
+        const aim = boss || (apNearest(aimPool) || {}).e;
+        if (aim) { mouseX = aim.x; mouseY = aim.y; }
+      } else if (state === 'upgrade') { joyMove.active = false; if (autoSkill) apAutoPick(); }
+      else if (state === 'victory') { joyMove.active = false; }
+      else if (state === 'gameover') {
+        joyMove.active = false;
+        if (!restarting) { restarting = true; setTimeout(() => { if (botRunning) goToCharSelect(); restarting = false; }, 3000); }
+      }
+      apUpdateHud();
+    } catch (err) { console.warn('autopilot error:', err); }
+    requestAnimationFrame(botTick);
+  }
+})();
+
+// 靜音開關綁定
+(function initSoundToggle() {
+  const btn = document.getElementById('sound-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    audioMuted = !audioMuted;
+    btn.classList.toggle('muted', audioMuted);
+    BGM.setVolume(audioMuted ? 0 : 0.7);
+  });
+})();
 </script>
 </body>
 </html>
