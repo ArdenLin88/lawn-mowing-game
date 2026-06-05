@@ -307,3 +307,32 @@
 - 預覽頁：[design-preview.html](design-preview.html)（不要 commit，看完可刪）
 - repo 指令：[CLAUDE.md](CLAUDE.md)
 - 主程式：[index.html](index.html)
+
+---
+
+## 🚀 自己上版（push）
+
+**專案絕對路徑（Windows）**：
+`c:\Users\sadna\OneDrive\桌面\Python-Lesson\06_割草遊戲\`
+
+**只要 push（commit 已完成時）** — Git Bash / 終端機執行：
+```bash
+cd "c:/Users/sadna/OneDrive/桌面/Python-Lesson/06_割草遊戲/"
+git push origin master
+```
+推上 master 後 **Vercel 會自動部署**。
+
+**完整「改完 → 上版」流程**：
+```bash
+cd "c:/Users/sadna/OneDrive/桌面/Python-Lesson/06_割草遊戲/"
+rm -f .git/*.lock .git/refs/heads/*.lock   # 預防 OneDrive 殘留鎖檔
+git add index.html BACKLOG.md
+git commit -m "feat: 你的訊息"
+git push origin master
+```
+
+> ⚠️ **OneDrive 鎖檔陷阱**：此目錄在 OneDrive 下，同步會偶爾殘留 `.git/*.lock`，
+> 導致 commit/push 報錯 `Unable to create '.git/index.lock'` 或 `HEAD.lock`。
+> 遇到時先跑 `rm -f .git/*.lock .git/refs/heads/*.lock` 清掉再重試（確認沒有其他 git 進程在跑即可安全刪）。
+>
+> 不要 commit：`.gstack/`、`design-preview.html`（本機用）。
